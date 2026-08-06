@@ -27,11 +27,21 @@ export type Snapshot = {
   updatedAt: number;
 };
 
-const rnd = (min: number, max: number) => min + Math.random() * (max - min);
+// Deterministic PRNG so server-rendered and client-rendered values match.
+let seed = 0x1f2e3d4c;
+const next = () => {
+  seed |= 0;
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const rnd = (min: number, max: number) => min + next() * (max - min);
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 export function makeSnapshot(prev?: Snapshot): Snapshot {
-  const hour = new Date().getHours() + new Date().getMinutes() / 60;
+  const hour = new Date().getHours();
+
   const solarCurve = Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI));
   const demand = clamp((prev?.demand ?? 480) + rnd(-18, 18), 300, 700);
   const solar = clamp(solarCurve * rnd(190, 250) + rnd(-8, 8), 0, 250);
