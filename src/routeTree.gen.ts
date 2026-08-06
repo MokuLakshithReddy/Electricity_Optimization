@@ -17,6 +17,7 @@ import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppDigitalTwinRouteImport } from './routes/app.digital-twin'
 import { Route as AppEnergyFlowRouteImport } from './routes/app.energy-flow'
 import { Route as AppForecastsRouteImport } from './routes/app.forecasts'
+import { Route as AppReportsRouteImport } from './routes/app.reports'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +59,11 @@ const AppForecastsRoute = AppForecastsRouteImport.update({
   path: '/forecasts',
   getParentRoute: () => AppRoute,
 } as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/app/digital-twin': typeof AppDigitalTwinRoute
   '/app/energy-flow': typeof AppEnergyFlowRoute
   '/app/forecasts': typeof AppForecastsRoute
+  '/app/reports': typeof AppReportsRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/app/digital-twin': typeof AppDigitalTwinRoute
   '/app/energy-flow': typeof AppEnergyFlowRoute
   '/app/forecasts': typeof AppForecastsRoute
+  '/app/reports': typeof AppReportsRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/app/digital-twin': typeof AppDigitalTwinRoute
   '/app/energy-flow': typeof AppEnergyFlowRoute
   '/app/forecasts': typeof AppForecastsRoute
+  '/app/reports': typeof AppReportsRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -99,6 +108,7 @@ export interface FileRouteTypes {
     | '/app/digital-twin'
     | '/app/energy-flow'
     | '/app/forecasts'
+    | '/app/reports'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/app/digital-twin'
     | '/app/energy-flow'
     | '/app/forecasts'
+    | '/app/reports'
     | '/app'
   id:
     | '__root__'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/app/digital-twin'
     | '/app/energy-flow'
     | '/app/forecasts'
+    | '/app/reports'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
@@ -184,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppForecastsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/reports': {
+      id: '/app/reports'
+      path: '/reports'
+      fullPath: '/app/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -193,6 +212,7 @@ interface AppRouteChildren {
   AppDigitalTwinRoute: typeof AppDigitalTwinRoute
   AppEnergyFlowRoute: typeof AppEnergyFlowRoute
   AppForecastsRoute: typeof AppForecastsRoute
+  AppReportsRoute: typeof AppReportsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -202,6 +222,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDigitalTwinRoute: AppDigitalTwinRoute,
   AppEnergyFlowRoute: AppEnergyFlowRoute,
   AppForecastsRoute: AppForecastsRoute,
+  AppReportsRoute: AppReportsRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
