@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
+import { Route as AppEnergyFlowRouteImport } from './routes/app.energy-flow'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,16 +35,23 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppEnergyFlowRoute = AppEnergyFlowRouteImport.update({
+  id: '/energy-flow',
+  path: '/energy-flow',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/energy-flow': typeof AppEnergyFlowRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/energy-flow': typeof AppEnergyFlowRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -51,14 +59,16 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/energy-flow': typeof AppEnergyFlowRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/app/dashboard' | '/app/'
+  fullPaths: '/' | '/app' | '/app/dashboard' | '/app/energy-flow' | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app/dashboard' | '/app'
-  id: '__root__' | '/' | '/app' | '/app/dashboard' | '/app/'
+  to: '/' | '/app/dashboard' | '/app/energy-flow' | '/app'
+  id:
+    '__root__' | '/' | '/app' | '/app/dashboard' | '/app/energy-flow' | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -96,16 +106,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/energy-flow': {
+      id: '/app/energy-flow'
+      path: '/energy-flow'
+      fullPath: '/app/energy-flow'
+      preLoaderRoute: typeof AppEnergyFlowRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
+  AppEnergyFlowRoute: typeof AppEnergyFlowRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
+  AppEnergyFlowRoute: AppEnergyFlowRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
