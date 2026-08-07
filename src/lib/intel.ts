@@ -302,14 +302,15 @@ export type RoiInput = { solarMw: number; batteryMwh: number; windMw: number };
 
 export function computeRoi({ solarMw, batteryMwh, windMw }: RoiInput) {
   const capex = solarMw * 3.6e6 + batteryMwh * 1.9e6 + windMw * 6.2e6;
-  const annualSavings = solarMw * 4.6e5 + batteryMwh * 2.1e5 + windMw * 6.9e5;
+  const annualSavings = solarMw * 6.6e5 + batteryMwh * 3.2e5 + windMw * 1.05e6;
   const opex = capex * 0.014;
   const net = Math.max(annualSavings - opex, 0);
   const payback = net > 0 ? capex / net : 0;
   const carbonPerYear = solarMw * 1.42 + batteryMwh * 0.42 + windMw * 2.1;
   const npv = net * 8.51 - capex; // 25y horizon, 11% discount ≈ annuity factor
   const irr = capex > 0 ? (net / capex) * 100 * 1.32 : 0;
-  const lcoe = capex > 0 ? capex / Math.max(1, (solarMw * 1750 + windMw * 2900 + batteryMwh * 320) * 25) : 0;
+  const lifetimeKwh = (solarMw * 1750 + windMw * 2900 + batteryMwh * 320) * 1000 * 25;
+  const lcoe = capex > 0 ? capex / Math.max(1, lifetimeKwh) : 0;
   const series = Array.from({ length: 16 }, (_, y) => ({
     t: `Y${y}`,
     cash: Math.round((net * y - capex) / 1e7) / 10, // ₹ crore
