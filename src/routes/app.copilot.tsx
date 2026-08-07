@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import { Send, Sparkle } from "lucide-react";
 import { AiBrain } from "@/components/AiBrain";
 import { GlassCard, PageHeader, StatusPill } from "@/components/ui-kit";
-import { inr, recommendations, useLiveEnergy } from "@/lib/energy";
+import { ExplainableCard } from "@/components/ExplainableCard";
+import { smartRecommendations } from "@/lib/intel";
+import { useLiveEnergy } from "@/lib/energy";
 
 export const Route = createFileRoute("/app/copilot")({
   head: () => ({
