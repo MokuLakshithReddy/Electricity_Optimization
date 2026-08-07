@@ -236,7 +236,7 @@ function Scenarios() {
             </div>
             <div className="rounded-xl bg-muted/40 p-2.5">
               <p className="text-muted-foreground">LCOE</p>
-              <p className="font-semibold">{inr(roi.lcoe)}/kWh</p>
+              <p className="font-semibold">₹{roi.lcoe.toFixed(2)}/kWh</p>
             </div>
             <div className="rounded-xl bg-muted/40 p-2.5">
               <p className="text-muted-foreground">CO₂ avoided</p>
