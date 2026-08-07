@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppCarbonRouteImport } from './routes/app.carbon'
 import { Route as AppCopilotRouteImport } from './routes/app.copilot'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppDigitalTwinRouteImport } from './routes/app.digital-twin'
@@ -34,6 +35,11 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCarbonRoute = AppCarbonRouteImport.update({
+  id: '/carbon',
+  path: '/carbon',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCopilotRoute = AppCopilotRouteImport.update({
@@ -80,6 +86,7 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/digital-twin': typeof AppDigitalTwinRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/digital-twin': typeof AppDigitalTwinRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/digital-twin': typeof AppDigitalTwinRoute
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
     | '/app/digital-twin'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
     | '/app/digital-twin'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
+    | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
     | '/app/digital-twin'
@@ -183,6 +195,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/carbon': {
+      id: '/app/carbon'
+      path: '/carbon'
+      fullPath: '/app/carbon'
+      preLoaderRoute: typeof AppCarbonRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/copilot': {
@@ -245,6 +264,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppCarbonRoute: typeof AppCarbonRoute
   AppCopilotRoute: typeof AppCopilotRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppDigitalTwinRoute: typeof AppDigitalTwinRoute
@@ -257,6 +277,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCarbonRoute: AppCarbonRoute,
   AppCopilotRoute: AppCopilotRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppDigitalTwinRoute: AppDigitalTwinRoute,
