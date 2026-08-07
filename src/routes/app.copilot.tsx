@@ -189,25 +189,14 @@ function Copilot() {
         </GlassCard>
 
         <div className="space-y-4">
-          <GlassCard delay={0.1}>
-            <h2 className="text-sm font-semibold">Live recommendations</h2>
-            <div className="mt-3 space-y-3">
-              {recommendations.slice(0, 4).map((r) => (
-                <div key={r.title} className="rounded-xl border border-border/60 bg-muted/30 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-semibold">{r.title}</p>
-                    <span className="shrink-0 text-[10px] text-cyan">{r.confidence}%</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{r.reason}</p>
-                  <div className="mt-2 flex gap-3 text-[11px]">
-                    <span className="text-eco">{r.savings ? inr(r.savings) : "—"}</span>
-                    <span className="text-cyan">{r.carbon ? `${r.carbon} tCO₂` : "—"}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Explainable recommendations
+          </p>
+          {smartRecommendations.slice(0, 3).map((rec, i) => (
+            <ExplainableCard key={rec.id} rec={rec} delay={0.1 + i * 0.05} />
+          ))}
         </div>
+
       </div>
     </div>
   );
