@@ -95,6 +95,25 @@ function EnergyFlow() {
                         opacity: src.mw > 1 ? 0.95 : 0.2,
                       }}
                     />
+                    {src.mw > 1
+                      ? [0, 1, 2].map((p) => (
+                          <circle key={p} r={Math.max(2, w / 4)} fill={colors[src.key]}>
+                            <animateMotion
+                              dur={`${Math.max(1.6, 7 - src.mw / 40)}s`}
+                              begin={`${p * 0.9}s`}
+                              repeatCount="indefinite"
+                              path={`M 150 ${y} C 300 ${y}, 340 210, 470 210`}
+                            />
+                            <animate
+                              attributeName="opacity"
+                              values="0;1;1;0"
+                              dur={`${Math.max(1.6, 7 - src.mw / 40)}s`}
+                              begin={`${p * 0.9}s`}
+                              repeatCount="indefinite"
+                            />
+                          </circle>
+                        ))
+                      : null}
                     <text x="8" y={y + 4} fill="var(--muted-foreground)" fontSize="12">
                       {src.name}
                     </text>

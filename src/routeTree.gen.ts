@@ -12,12 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppCarbonRouteImport } from './routes/app.carbon'
 import { Route as AppCopilotRouteImport } from './routes/app.copilot'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppDigitalTwinRouteImport } from './routes/app.digital-twin'
 import { Route as AppEnergyFlowRouteImport } from './routes/app.energy-flow'
+import { Route as AppExecutiveRouteImport } from './routes/app.executive'
 import { Route as AppForecastsRouteImport } from './routes/app.forecasts'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppScenariosRouteImport } from './routes/app.scenarios'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
 
 const IndexRoute = IndexRouteImport.update({
@@ -33,6 +36,11 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCarbonRoute = AppCarbonRouteImport.update({
+  id: '/carbon',
+  path: '/carbon',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCopilotRoute = AppCopilotRouteImport.update({
@@ -55,6 +63,11 @@ const AppEnergyFlowRoute = AppEnergyFlowRouteImport.update({
   path: '/energy-flow',
   getParentRoute: () => AppRoute,
 } as any)
+const AppExecutiveRoute = AppExecutiveRouteImport.update({
+  id: '/executive',
+  path: '/executive',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppForecastsRoute = AppForecastsRouteImport.update({
   id: '/forecasts',
   path: '/forecasts',
@@ -63,6 +76,11 @@ const AppForecastsRoute = AppForecastsRouteImport.update({
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppScenariosRoute = AppScenariosRouteImport.update({
+  id: '/scenarios',
+  path: '/scenarios',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -74,23 +92,29 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/digital-twin': typeof AppDigitalTwinRoute
   '/app/energy-flow': typeof AppEnergyFlowRoute
+  '/app/executive': typeof AppExecutiveRoute
   '/app/forecasts': typeof AppForecastsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/digital-twin': typeof AppDigitalTwinRoute
   '/app/energy-flow': typeof AppEnergyFlowRoute
+  '/app/executive': typeof AppExecutiveRoute
   '/app/forecasts': typeof AppForecastsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
   '/app': typeof AppIndexRoute
 }
@@ -98,12 +122,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/digital-twin': typeof AppDigitalTwinRoute
   '/app/energy-flow': typeof AppEnergyFlowRoute
+  '/app/executive': typeof AppExecutiveRoute
   '/app/forecasts': typeof AppForecastsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/': typeof AppIndexRoute
 }
@@ -112,35 +139,44 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
     | '/app/digital-twin'
     | '/app/energy-flow'
+    | '/app/executive'
     | '/app/forecasts'
     | '/app/reports'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
     | '/app/digital-twin'
     | '/app/energy-flow'
+    | '/app/executive'
     | '/app/forecasts'
     | '/app/reports'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app'
   id:
     | '__root__'
     | '/'
     | '/app'
+    | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
     | '/app/digital-twin'
     | '/app/energy-flow'
+    | '/app/executive'
     | '/app/forecasts'
     | '/app/reports'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app/'
   fileRoutesById: FileRoutesById
@@ -173,6 +209,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/carbon': {
+      id: '/app/carbon'
+      path: '/carbon'
+      fullPath: '/app/carbon'
+      preLoaderRoute: typeof AppCarbonRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/copilot': {
       id: '/app/copilot'
       path: '/copilot'
@@ -201,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEnergyFlowRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/executive': {
+      id: '/app/executive'
+      path: '/executive'
+      fullPath: '/app/executive'
+      preLoaderRoute: typeof AppExecutiveRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/forecasts': {
       id: '/app/forecasts'
       path: '/forecasts'
@@ -215,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/scenarios': {
+      id: '/app/scenarios'
+      path: '/scenarios'
+      fullPath: '/app/scenarios'
+      preLoaderRoute: typeof AppScenariosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/settings': {
       id: '/app/settings'
       path: '/settings'
@@ -226,23 +283,29 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppCarbonRoute: typeof AppCarbonRoute
   AppCopilotRoute: typeof AppCopilotRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppDigitalTwinRoute: typeof AppDigitalTwinRoute
   AppEnergyFlowRoute: typeof AppEnergyFlowRoute
+  AppExecutiveRoute: typeof AppExecutiveRoute
   AppForecastsRoute: typeof AppForecastsRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppScenariosRoute: typeof AppScenariosRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCarbonRoute: AppCarbonRoute,
   AppCopilotRoute: AppCopilotRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppDigitalTwinRoute: AppDigitalTwinRoute,
   AppEnergyFlowRoute: AppEnergyFlowRoute,
+  AppExecutiveRoute: AppExecutiveRoute,
   AppForecastsRoute: AppForecastsRoute,
   AppReportsRoute: AppReportsRoute,
+  AppScenariosRoute: AppScenariosRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
 }
