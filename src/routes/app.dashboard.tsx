@@ -30,7 +30,10 @@ import {
   YAxis,
 } from "recharts";
 import { GlassCard, Gauge, Metric, PageHeader, StatusPill } from "@/components/ui-kit";
-import { alerts, inr, recommendations, useLiveEnergy } from "@/lib/energy";
+import { ExplainableCard } from "@/components/ExplainableCard";
+import { RecommendationTimeline } from "@/components/RecommendationTimeline";
+import { smartRecommendations } from "@/lib/intel";
+import { alerts, inr, useLiveEnergy } from "@/lib/energy";
 
 export const Route = createFileRoute("/app/dashboard")({
   head: () => ({
