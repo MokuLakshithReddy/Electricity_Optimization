@@ -12,6 +12,9 @@ import {
   Search,
   Bell,
   Menu,
+  Briefcase,
+  Scale,
+  Leaf,
   Zap,
   ShieldCheck,
 } from "lucide-react";
