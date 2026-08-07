@@ -21,10 +21,13 @@ import { StatusPill } from "@/components/ui-kit";
 
 const nav = [
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/app/energy-flow", label: "Energy Flow", icon: Waves },
+  { to: "/app/executive", label: "Executive", icon: Briefcase },
+  { to: "/app/energy-flow", label: "Energy Network", icon: Waves },
   { to: "/app/forecasts", label: "Forecasts", icon: LineChart },
   { to: "/app/copilot", label: "AI Copilot", icon: Bot },
   { to: "/app/digital-twin", label: "Digital Twin", icon: Boxes },
+  { to: "/app/scenarios", label: "Scenarios & ROI", icon: Scale },
+  { to: "/app/carbon", label: "Carbon & ESG", icon: Leaf },
   { to: "/app/reports", label: "Reports", icon: FileText },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ] as const;
