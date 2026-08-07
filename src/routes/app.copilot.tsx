@@ -28,8 +28,9 @@ export const Route = createFileRoute("/app/copilot")({
 type Msg = { role: "user" | "assistant"; text: string };
 
 const suggestions = [
-  "Why did electricity cost increase today?",
-  "How can we reduce today's bill?",
+  "Why did today's bill increase?",
+  "How can we save 20% tomorrow?",
+  "What happens if the battery fails?",
   "Why is the battery charging now?",
   "What happens if the grid fails?",
   "How much carbon did we save?",
@@ -37,12 +38,16 @@ const suggestions = [
 
 function answerFor(q: string): string {
   const s = q.toLowerCase();
-  if (s.includes("cost") && (s.includes("increase") || s.includes("why")))
-    return `Landed cost rose ₹1.42/kWh versus yesterday. Three drivers:\n\n1. **ToD tariff step-up** — the 18:00–21:00 block moved to ₹11.80/kWh, and 138 MWh of rolling-mill load stayed inside that window.\n2. **Solar shortfall** — cloud cover averaged 61% between 11:00 and 14:00, cutting PV yield by 42 MWh.\n3. **Captive unit 2 derate** — heat rate drifted 3.1%, pushing marginal generation cost from ₹5.10 to ₹5.62/kWh.\n\nRecovering the peak-window shift alone claws back roughly ₹12.6 lakh today.`;
+  if (s.includes("battery") && (s.includes("fail") || s.includes("fails") || s.includes("down")))
+    return `Simulated total BESS loss (118 MWh, 70 MW) at present load:\n\n• **Immediate:** evening peak shaving is lost — 140 MW shifts to grid import at ₹11.80/kWh, costing **₹12.6 lakh/day**.\n• **Reliability:** ride-through drops from 26 minutes to 0; captive ramp (2.8 MW/min) becomes the only bridge, so two gensets auto-start on any grid dip.\n• **Carbon:** +41.2 tCO₂/day from displaced storage arbitrage.\n• **Mitigation:** pre-ramp captive units 2 and 3 to 84 MW, shift the pickling line and cold mill out of the 18:00–21:00 block, and hold DG-1/DG-3 in hot standby.\n\nNet exposure ₹14.4 lakh/day; with mitigation applied it falls to **₹5.1 lakh/day** and availability holds at 98.6%. Confidence **92%**.`;
+  if ((s.includes("save") || s.includes("reduce") || s.includes("cut")) && /\d+\s*%/.test(s))
+    return `To hit a **20% reduction tomorrow** (baseline ₹1.42 crore), I need to remove ₹28.4 lakh. Here is the plan:\n\n1. **Battery arbitrage at full depth** — charge to 85% at ₹2.10/kWh, discharge 60 MW across the evening peak → **₹12.6 lakh** (94% confidence).\n2. **Shift 3 flexible loads** — pickling line, compressor pre-cool and the aux water plant out of shoulder/peak blocks → **₹6.1 lakh** (88%).\n3. **Captive heat-rate correction** — clean unit 2 economiser; recovers 3.1% efficiency → **₹4.3 lakh** (81%).\n4. **Zero diesel** — hold all gensets at standby; BESS reserve covers contingency → **₹3.2 lakh** (90%).\n5. **Power-factor correction to 0.99** — releases demand-charge headroom → **₹2.4 lakh** (86%).\n\nTotal **₹28.6 lakh (20.1%)**, 74 tCO₂ avoided, no impact on hot-metal output. Overall plan confidence **89%**.`;
+  if (s.includes("cost") || s.includes("bill") || s.includes("increase"))
+    return `Landed cost rose ₹1.42/kWh versus yesterday (bill up 11.8%). Three drivers, ranked by contribution:\n\n1. **ToD tariff step-up — 46%** of the variance. The 18:00–21:00 block moved to ₹11.80/kWh and 138 MWh of rolling-mill load stayed inside that window.\n2. **Solar shortfall — 34%.** Cloud cover averaged 61% between 11:00 and 14:00, cutting PV yield by 42 MWh, which was backfilled from grid.\n3. **Captive unit 2 derate — 20%.** Heat rate drifted 3.1%, pushing marginal generation cost from ₹5.10 to ₹5.62/kWh.\n\nRecovering the peak-window shift alone claws back roughly **₹12.6 lakh** today. Attribution confidence **93%**, based on 18,420 metered signals.`;
   if (s.includes("reduce") || s.includes("bill"))
     return `Four actions with the highest expected value for the remaining operating day:\n\n• Charge the battery bank to 85% before 14:00 while marginal solar sits at ₹2.10/kWh — **₹4.1 lakh**.\n• Discharge 60 MW across 18:00–21:00 instead of importing — **₹12.6 lakh**.\n• Defer the non-critical pickling line by 90 minutes — **₹2.3 lakh**.\n• Hold diesel at standby; captive unit 3 is ₹13.0/kWh cheaper — **₹1.8 lakh**.\n\nCombined: **₹20.8 lakh** with 68 tCO₂ avoided and no reliability impact.`;
   if (s.includes("battery"))
-    return `The battery is charging because the optimiser sees a negative net-cost window. Solar surplus is 62 MW above internal load, marginal charge cost is ₹2.10/kWh, and the forecast discharge value at 18:40 is ₹11.80/kWh — a 5.6× arbitrage spread. Charging stops automatically at 85% SoC to preserve a 40% reserve for grid ride-through.`;
+    return `The battery is charging because the optimiser sees a negative net-cost window. Solar surplus is 62 MW above internal load, marginal charge cost is ₹2.10/kWh, and the forecast discharge value at 18:40 is ₹11.80/kWh — a 5.6× arbitrage spread. Charging stops automatically at 85% SoC to preserve a 40% reserve for grid ride-through. Confidence **94%**.`;
   if (s.includes("grid") && s.includes("fail"))
     return `Simulated N-1 grid loss at present load (${"~"}500 MW):\n\n• Captive plant ramps 92 → 168 MW in 45 seconds.\n• Battery bridges the gap at 70 MW for 26 minutes.\n• Two 15 MW gensets auto-start at T+90 s.\n• Non-critical load shed: 48 MW (coke oven fans, auxiliary lighting).\n\n**Result:** blast furnace and BOF stay energised. Reliability score 96.4%, incremental cost ₹9.4 lakh per hour of islanded operation.`;
   if (s.includes("carbon") || s.includes("co2") || s.includes("saved"))
