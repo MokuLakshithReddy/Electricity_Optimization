@@ -172,7 +172,100 @@ function SettingsPage() {
             <Toggle label="High-contrast alarms" />
           </div>
         </GlassCard>
+
+        <LiveDataSettingsCard />
       </div>
     </div>
   );
 }
+
+function LiveDataSettingsCard() {
+  const [mode, setMode] = useState<string>(() => localStorage.getItem("intelligrid_data_mode") || "open-meteo");
+  const [apiUrl, setApiUrl] = useState<string>(() => localStorage.getItem("intelligrid_custom_api_url") || "https://api.intelligrid.example.com/v1/telemetry");
+
+  const handleSelectMode = (newMode: string) => {
+    setMode(newMode);
+    localStorage.setItem("intelligrid_data_mode", newMode);
+    toast.success(`Live data source set to ${newMode === "open-meteo" ? "Open-Meteo API" : newMode === "custom-api" ? "Custom REST API" : "Mock Simulation"}`);
+  };
+
+  const handleSaveApiUrl = (url: string) => {
+    setApiUrl(url);
+    localStorage.setItem("intelligrid_custom_api_url", url);
+  };
+
+  return (
+    <GlassCard delay={0.20} className="lg:col-span-2 border-emerald-500/30 bg-emerald-950/10">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Plug className="h-4 w-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold text-emerald-300">Real Live Data Integration</h2>
+        </div>
+        <StatusPill status={mode === "open-meteo" ? "Connected (Open-Meteo)" : mode === "custom-api" ? "Custom API" : "Mock Mode"} tone={mode === "mock" ? "amber" : "eco"} />
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Choose your live data stream source for plant telemetry, weather irradiance, and renewable generation.
+      </p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <button
+          onClick={() => handleSelectMode("open-meteo")}
+          className={`flex flex-col items-start gap-1 rounded-xl border p-3.5 text-left transition-all ${
+            mode === "open-meteo"
+              ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+              : "border-border/60 bg-muted/20 hover:bg-muted/40"
+          }`}
+        >
+          <span className="text-sm font-medium text-foreground">Open-Meteo API</span>
+          <span className="text-xs text-muted-foreground">
+            Real-time solar radiation ($\text{W/m}^2$), wind speed ($\text{m/s}$), and weather physics.
+          </span>
+        </button>
+
+        <button
+          onClick={() => handleSelectMode("custom-api")}
+          className={`flex flex-col items-start gap-1 rounded-xl border p-3.5 text-left transition-all ${
+            mode === "custom-api"
+              ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+              : "border-border/60 bg-muted/20 hover:bg-muted/40"
+          }`}
+        >
+          <span className="text-sm font-medium text-foreground">Custom REST API</span>
+          <span className="text-xs text-muted-foreground">
+            Connect directly to an industrial IoT backend or external HTTP endpoint.
+          </span>
+        </button>
+
+        <button
+          onClick={() => handleSelectMode("mock")}
+          className={`flex flex-col items-start gap-1 rounded-xl border p-3.5 text-left transition-all ${
+            mode === "mock"
+              ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500"
+              : "border-border/60 bg-muted/20 hover:bg-muted/40"
+          }`}
+        >
+          <span className="text-sm font-medium text-foreground">Mock Simulation</span>
+          <span className="text-xs text-muted-foreground">
+            Fallback internal deterministic pseudo-random generator.
+          </span>
+        </button>
+      </div>
+
+      {mode === "custom-api" && (
+        <div className="mt-4 rounded-xl border border-border/60 bg-muted/30 p-3">
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Custom API Endpoint URL</span>
+            <input
+              type="text"
+              value={apiUrl}
+              onChange={(e) => handleSaveApiUrl(e.target.value)}
+              placeholder="https://api.yourplant.com/v1/telemetry"
+              className="mt-1.5 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
+          </label>
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+

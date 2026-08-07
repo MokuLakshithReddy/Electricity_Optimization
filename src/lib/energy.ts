@@ -1,4 +1,11 @@
 import { useEffect, useState } from "react";
+import {
+  calculateSolarMW,
+  calculateWindMW,
+  fetchLiveWeatherData,
+  LiveDataSourceMode,
+  LiveWeatherData,
+} from "./live-api";
 
 export type SourceKey = "solar" | "wind" | "battery" | "grid" | "captive" | "diesel";
 
@@ -25,6 +32,10 @@ export type Snapshot = {
   systemHealth: number;
   sources: EnergySource[];
   updatedAt: number;
+  isLive?: boolean;
+  dataSource?: string;
+  weather?: LiveWeatherData;
+  error?: string;
 };
 
 // Deterministic PRNG so server-rendered and client-rendered values match.
@@ -125,17 +136,153 @@ export function makeSnapshot(prev?: Snapshot): Snapshot {
     systemHealth: clamp(97 + rnd(-1.5, 1.5), 90, 100),
     sources,
     updatedAt: Date.now(),
+    isLive: false,
+    dataSource: "Mock Simulation",
   };
 }
 
-export function useLiveEnergy(intervalMs = 3000) {
+export function makeSnapshotWithLiveData(weather: LiveWeatherData, prev?: Snapshot): Snapshot {
+  const solar = calculateSolarMW(weather.solarIrradiance, weather.cloudCover);
+  const wind = calculateWindMW(weather.windSpeed100m);
+
+  // Dynamic load modeling based on ambient temperature (HVAC load scaling)
+  const baseDemand = 440 + Math.max(0, weather.temperature - 25) * 6;
+  const demand = clamp((prev?.demand ?? baseDemand) + rnd(-5, 5), 320, 680);
+
+  const batterySoc = clamp((prev?.batterySoc ?? 75) + rnd(-0.5, 0.5), 10, 100);
+  const battery = clamp(solar > 120 ? 45 : 15, 0, 70);
+  const captive = clamp(110 + rnd(-10, 10), 60, 180);
+
+  const remaining = demand - solar - wind - battery - captive;
+  const grid = clamp(remaining > 0 ? remaining : 0, 0, 400);
+  const diesel = remaining > 220 ? clamp(remaining - 220, 0, 60) : 0;
+  const price = clamp(7.2 + (grid > 150 ? 2.5 : 0) + rnd(-0.2, 0.2), 4, 12);
+  const renewablePct = clamp(((solar + wind) / demand) * 100, 0, 100);
+
+  const solarEfficiency = clamp(94 - Math.max(0, weather.temperature - 25) * 0.35, 75, 98);
+
+  const sources: EnergySource[] = [
+    {
+      key: "solar",
+      name: "Solar Park",
+      mw: solar,
+      status: solar > 5 ? "Optimal" : "Standby",
+      efficiency: Number(solarEfficiency.toFixed(1)),
+      co2: 0,
+      cost: 2.1,
+    },
+    {
+      key: "wind",
+      name: "Wind Farm",
+      mw: wind,
+      status: wind > 10 ? "Optimal" : "Standby",
+      efficiency: Number((89 + rnd(-2, 2)).toFixed(1)),
+      co2: 0,
+      cost: 2.6,
+    },
+    {
+      key: "battery",
+      name: "Battery Storage",
+      mw: battery,
+      status: solar > 100 ? "Charging" : "Reserve",
+      efficiency: 95.5,
+      co2: 0,
+      cost: 3.2,
+    },
+    {
+      key: "grid",
+      name: "Grid Import",
+      mw: grid,
+      status: "Available",
+      efficiency: 99.0,
+      co2: Number((grid * 0.00082).toFixed(3)),
+      cost: Number(price.toFixed(2)),
+    },
+    {
+      key: "captive",
+      name: "Captive Plant",
+      mw: captive,
+      status: "Available",
+      efficiency: 81.2,
+      co2: Number((captive * 0.00071).toFixed(3)),
+      cost: 5.4,
+    },
+    {
+      key: "diesel",
+      name: "Diesel Genset",
+      mw: diesel,
+      status: diesel > 1 ? "Optimal" : "Standby",
+      efficiency: 63.5,
+      co2: Number((diesel * 0.0026).toFixed(3)),
+      cost: 18.4,
+    },
+  ];
+
+  return {
+    demand: Number(demand.toFixed(1)),
+    price: Number(price.toFixed(2)),
+    savingsToday: Number(((prev?.savingsToday ?? 1840000) + rnd(150, 400)).toFixed(0)),
+    co2Today: Number(((prev?.co2Today ?? 412) + rnd(0.01, 0.05)).toFixed(2)),
+    renewablePct: Number(renewablePct.toFixed(1)),
+    batterySoc: Number(batterySoc.toFixed(1)),
+    batteryHealth: 96.4,
+    gridStatus: price > 10.5 ? "Constrained" : "Stable",
+    dieselStatus: diesel > 1 ? "Running" : "Standby",
+    systemHealth: Number(clamp(97.5 + rnd(-0.5, 0.5), 92, 100).toFixed(1)),
+    sources,
+    updatedAt: Date.now(),
+    isLive: true,
+    dataSource: `Open-Meteo API (${weather.locationName})`,
+    weather,
+  };
+}
+
+export function useLiveEnergy(intervalMs = 5000, preferredMode?: LiveDataSourceMode) {
   const [snap, setSnap] = useState<Snapshot>(() => makeSnapshot());
+
   useEffect(() => {
-    const id = setInterval(() => setSnap((p) => makeSnapshot(p)), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
+    let isMounted = true;
+
+    async function updateEnergyData() {
+      const mode = preferredMode || (localStorage.getItem("intelligrid_data_mode") as LiveDataSourceMode) || "open-meteo";
+
+      if (mode === "mock") {
+        if (isMounted) setSnap((prev) => makeSnapshot(prev));
+        return;
+      }
+
+      try {
+        const liveWeather = await fetchLiveWeatherData();
+        if (isMounted) {
+          setSnap((prev) => makeSnapshotWithLiveData(liveWeather, prev));
+        }
+      } catch (err) {
+        console.warn("Live API fetch failed, falling back to simulation snapshot:", err);
+        if (isMounted) {
+          setSnap((prev) => {
+            const fallback = makeSnapshot(prev);
+            fallback.error = err instanceof Error ? err.message : "Live data offline";
+            return fallback;
+          });
+        }
+      }
+    }
+
+    // Immediate initial fetch
+    updateEnergyData();
+
+    // Live periodic refresh
+    const id = setInterval(updateEnergyData, intervalMs);
+
+    return () => {
+      isMounted = false;
+      clearInterval(id);
+    };
+  }, [intervalMs, preferredMode]);
+
   return snap;
 }
+
 
 export const inr = (n: number) =>
   "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: n > 1000 ? 0 : 2 });

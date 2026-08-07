@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * IntelliGrid AI design system — dark futuristic control-room UI.
- * Blue / Cyan / Green accents, glassmorphism surfaces.
+ * IntelliGrid AI design system — Executive Industrial Energy Platform.
+ * Deep Green (#1B4D3E), Warm Off-White (#FBF9F5), Crisp White Cards, Blue (#2563EB) accents.
  */
 
 @theme inline {
@@ -59,7 +59,51 @@
 }
 
 :root {
-  --radius: 0.875rem;
+  --radius: 1rem;
+  --background: oklch(0.985 0.008 85); /* Warm cream / off-white #FAF8F5 */
+  --foreground: oklch(0.2 0.025 250); /* Charcoal #1F2937 */
+  --card: oklch(1 0 0); /* Pure White #FFFFFF */
+  --card-foreground: oklch(0.2 0.025 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.025 250);
+  --primary: oklch(0.38 0.08 160); /* Deep Green #1B4D3E */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.025 155); /* Soft mint green highlight #E8F5E9 */
+  --secondary-foreground: oklch(0.28 0.08 160); /* Deep Green text */
+  --muted: oklch(0.96 0.01 85);
+  --muted-foreground: oklch(0.5 0.02 245);
+  --accent: oklch(0.95 0.025 155);
+  --accent-foreground: oklch(0.28 0.08 160);
+  --destructive: oklch(0.6 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.91 0.01 85);
+  --input: oklch(0.91 0.01 85);
+  --ring: oklch(0.38 0.08 160);
+  --cyan: oklch(0.55 0.18 250); /* Vivid Blue / Cyan #2563EB */
+  --eco: oklch(0.42 0.1 160); /* Forest Green */
+  --warn: oklch(0.7 0.16 75); /* Amber / Gold #F59E0B */
+  --chart-1: oklch(0.38 0.08 160);
+  --chart-2: oklch(0.55 0.18 250);
+  --chart-3: oklch(0.7 0.16 75);
+  --chart-4: oklch(0.6 0.15 300);
+  --chart-5: oklch(0.5 0.12 195);
+  --sidebar: oklch(0.99 0.005 85);
+  --sidebar-foreground: oklch(0.25 0.02 250);
+  --sidebar-primary: oklch(0.38 0.08 160);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.03 155);
+  --sidebar-accent-foreground: oklch(0.25 0.08 160);
+  --sidebar-border: oklch(0.91 0.01 85);
+  --sidebar-ring: oklch(0.38 0.08 160);
+
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(229, 224, 216, 0.7);
+  --gradient-brand: linear-gradient(135deg, #1B4D3E 0%, #155E49 60%, #0D5C46 100%);
+  --shadow-glow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.dark {
+  color-scheme: dark;
   --background: oklch(0.16 0.03 250);
   --foreground: oklch(0.96 0.01 240);
   --card: oklch(0.21 0.035 252);
@@ -74,48 +118,15 @@
   --muted-foreground: oklch(0.7 0.03 245);
   --accent: oklch(0.78 0.15 195);
   --accent-foreground: oklch(0.15 0.03 250);
-  --destructive: oklch(0.63 0.22 25);
-  --destructive-foreground: oklch(0.98 0.01 240);
   --border: oklch(0.35 0.04 250 / 45%);
   --input: oklch(0.35 0.04 250 / 55%);
   --ring: oklch(0.72 0.16 220);
   --cyan: oklch(0.8 0.14 195);
   --eco: oklch(0.78 0.18 155);
-  --warn: oklch(0.8 0.16 80);
-  --chart-1: oklch(0.65 0.19 250);
-  --chart-2: oklch(0.8 0.14 195);
-  --chart-3: oklch(0.78 0.18 155);
-  --chart-4: oklch(0.8 0.16 80);
-  --chart-5: oklch(0.68 0.2 320);
   --sidebar: oklch(0.18 0.032 252);
   --sidebar-foreground: oklch(0.93 0.01 240);
-  --sidebar-primary: oklch(0.65 0.19 250);
-  --sidebar-primary-foreground: oklch(0.14 0.03 250);
   --sidebar-accent: oklch(0.26 0.04 252);
   --sidebar-accent-foreground: oklch(0.95 0.01 240);
-  --sidebar-border: oklch(0.34 0.04 250 / 45%);
-  --sidebar-ring: oklch(0.72 0.16 220);
-
-  --glass-bg: oklch(0.26 0.04 252 / 45%);
-  --glass-border: oklch(0.8 0.06 230 / 14%);
-  --gradient-brand: linear-gradient(
-    135deg,
-    oklch(0.65 0.19 250),
-    oklch(0.8 0.14 195) 55%,
-    oklch(0.78 0.18 155)
-  );
-  --gradient-surface: radial-gradient(
-      1200px 600px at 12% -10%,
-      oklch(0.4 0.14 250 / 30%),
-      transparent 60%
-    ),
-    radial-gradient(900px 500px at 95% 0%, oklch(0.5 0.12 195 / 22%), transparent 60%),
-    radial-gradient(800px 700px at 60% 110%, oklch(0.45 0.14 155 / 16%), transparent 65%);
-  --shadow-glow: 0 0 0 1px oklch(0.8 0.06 230 / 10%), 0 24px 60px -24px oklch(0.1 0.05 250 / 90%);
-}
-
-.dark {
-  color-scheme: dark;
 }
 
 @layer base {
@@ -124,13 +135,11 @@
   }
 
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
     background-color: var(--color-background);
-    background-image: var(--gradient-surface);
-    background-attachment: fixed;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -147,7 +156,7 @@
 
 @utility glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(130%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-glow);
 }
@@ -163,26 +172,20 @@
 }
 
 @utility grid-lines {
-  background-image: linear-gradient(oklch(0.7 0.05 230 / 6%) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.7 0.05 230 / 6%) 1px, transparent 1px);
+  background-image: linear-gradient(oklch(0.3 0.02 230 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.3 0.02 230 / 3%) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 oklch(0.8 0.14 195 / 45%);
+    box-shadow: 0 0 0 0 rgba(27, 77, 62, 0.35);
   }
   70% {
-    box-shadow: 0 0 0 14px oklch(0.8 0.14 195 / 0%);
+    box-shadow: 0 0 0 12px rgba(27, 77, 62, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 oklch(0.8 0.14 195 / 0%);
-  }
-}
-
-@keyframes dash-flow {
-  to {
-    stroke-dashoffset: -200;
+    box-shadow: 0 0 0 0 rgba(27, 77, 62, 0);
   }
 }
 
@@ -192,7 +195,7 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translateY(-8px);
   }
 }
 

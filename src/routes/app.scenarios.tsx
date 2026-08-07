@@ -20,6 +20,8 @@ import { ConfidenceRing } from "@/components/ExplainableCard";
 import { inr } from "@/lib/energy";
 import { computeRoi, strategies } from "@/lib/intel";
 
+import { StrategyComparison } from "@/components/strategy/StrategyComparison";
+
 export const Route = createFileRoute("/app/scenarios")({
   head: () => ({
     meta: [
@@ -83,66 +85,14 @@ function Scenarios() {
   ];
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Scenario Comparison & ROI"
         subtitle="Strategy trade-offs and investment modelling for the energy portfolio"
         right={<StatusPill status="Model refreshed hourly" tone="cyan" />}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {strategies.map((s, i) => {
-          const active = selected === s.key;
-          return (
-            <motion.button
-              key={s.key}
-              onClick={() => setSelected(s.key)}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className={`glass rounded-2xl p-4 text-left transition-all ${
-                active ? "ring-2" : "opacity-85 hover:opacity-100"
-              }`}
-              style={{ ["--tw-ring-color" as string]: active ? toneColor[s.tone] : "transparent" } as never}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: toneColor[s.tone] }}>
-                    {s.name}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{s.summary}</p>
-                </div>
-                <ConfidenceRing value={s.confidence} tone={s.tone === "muted" ? "cyan" : s.tone} />
-              </div>
-              <div className="mt-3 space-y-1.5 text-[11px]">
-                {[
-                  ["Annual cost", `₹${s.cost} Cr`],
-                  ["Emissions", `${s.co2} ktCO₂`],
-                  ["Renewable", `${s.renewable}%`],
-                  ["Reliability", `${s.reliability}%`],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between">
-                    <span className="text-muted-foreground">{k}</span>
-                    <span className="font-mono">{v}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px]">
-                <span className="text-muted-foreground">Savings vs current </span>
-                <span className="font-semibold text-eco">
-                  {s.savings ? inr(s.savings) : "baseline"}
-                </span>
-              </div>
-              {active ? (
-                <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
-                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-eco" />
-                  {s.rationale}
-                </p>
-              ) : null}
-            </motion.button>
-          );
-        })}
-      </div>
+      <StrategyComparison />
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <GlassCard delay={0.1}>

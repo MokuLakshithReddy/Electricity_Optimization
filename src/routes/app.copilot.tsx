@@ -1,12 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { Send, Sparkle } from "lucide-react";
-import { AiBrain } from "@/components/AiBrain";
-import { GlassCard, PageHeader, StatusPill } from "@/components/ui-kit";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Send,
+  Sparkles,
+  Mic,
+  Zap,
+  ShieldCheck,
+  Leaf,
+  Activity,
+  ArrowRight,
+  HelpCircle,
+  TrendingUp,
+  Cpu,
+  AlertTriangle,
+} from "lucide-react";
+import { useEnergyState } from "@/context/EnergyContext";
 import { ExplainableCard } from "@/components/ExplainableCard";
 import { smartRecommendations } from "@/lib/intel";
-import { useLiveEnergy } from "@/lib/energy";
 
 export const Route = createFileRoute("/app/copilot")({
   head: () => ({
@@ -15,154 +26,463 @@ export const Route = createFileRoute("/app/copilot")({
       {
         name: "description",
         content:
-          "Ask the energy copilot why costs moved, how to cut the bill, and what happens if the grid fails.",
+          "Conversational energy intelligence for industrial plant operations. Analyze cost, carbon, reliability, and dispatch in real time.",
       },
       { property: "og:title", content: "AI Energy Copilot — IntelliGrid AI" },
       {
         property: "og:description",
-        content: "Conversational energy intelligence for plant operations teams.",
+        content: "Enterprise AI control assistant for Tata Steel Jamshedpur energy management.",
       },
     ],
   }),
-  component: Copilot,
+  component: CopilotPage,
 });
 
-type Msg = { role: "user" | "assistant"; text: string };
+type MessageRole = "user" | "assistant";
 
-const suggestions = [
-  "Why did today's bill increase?",
-  "How can we save 20% tomorrow?",
-  "What happens if the battery fails?",
-  "Why is the battery charging now?",
-  "What happens if the grid fails?",
-  "How much carbon did we save?",
-];
-
-function answerFor(q: string): string {
-  const s = q.toLowerCase();
-  if (s.includes("battery") && (s.includes("fail") || s.includes("fails") || s.includes("down")))
-    return `Simulated total BESS loss (118 MWh, 70 MW) at present load:\n\n• **Immediate:** evening peak shaving is lost — 140 MW shifts to grid import at ₹11.80/kWh, costing **₹12.6 lakh/day**.\n• **Reliability:** ride-through drops from 26 minutes to 0; captive ramp (2.8 MW/min) becomes the only bridge, so two gensets auto-start on any grid dip.\n• **Carbon:** +41.2 tCO₂/day from displaced storage arbitrage.\n• **Mitigation:** pre-ramp captive units 2 and 3 to 84 MW, shift the pickling line and cold mill out of the 18:00–21:00 block, and hold DG-1/DG-3 in hot standby.\n\nNet exposure ₹14.4 lakh/day; with mitigation applied it falls to **₹5.1 lakh/day** and availability holds at 98.6%. Confidence **92%**.`;
-  if ((s.includes("save") || s.includes("reduce") || s.includes("cut")) && /\d+\s*%/.test(s))
-    return `To hit a **20% reduction tomorrow** (baseline ₹1.42 crore), I need to remove ₹28.4 lakh. Here is the plan:\n\n1. **Battery arbitrage at full depth** — charge to 85% at ₹2.10/kWh, discharge 60 MW across the evening peak → **₹12.6 lakh** (94% confidence).\n2. **Shift 3 flexible loads** — pickling line, compressor pre-cool and the aux water plant out of shoulder/peak blocks → **₹6.1 lakh** (88%).\n3. **Captive heat-rate correction** — clean unit 2 economiser; recovers 3.1% efficiency → **₹4.3 lakh** (81%).\n4. **Zero diesel** — hold all gensets at standby; BESS reserve covers contingency → **₹3.2 lakh** (90%).\n5. **Power-factor correction to 0.99** — releases demand-charge headroom → **₹2.4 lakh** (86%).\n\nTotal **₹28.6 lakh (20.1%)**, 74 tCO₂ avoided, no impact on hot-metal output. Overall plan confidence **89%**.`;
-  if (s.includes("cost") || s.includes("bill") || s.includes("increase"))
-    return `Landed cost rose ₹1.42/kWh versus yesterday (bill up 11.8%). Three drivers, ranked by contribution:\n\n1. **ToD tariff step-up — 46%** of the variance. The 18:00–21:00 block moved to ₹11.80/kWh and 138 MWh of rolling-mill load stayed inside that window.\n2. **Solar shortfall — 34%.** Cloud cover averaged 61% between 11:00 and 14:00, cutting PV yield by 42 MWh, which was backfilled from grid.\n3. **Captive unit 2 derate — 20%.** Heat rate drifted 3.1%, pushing marginal generation cost from ₹5.10 to ₹5.62/kWh.\n\nRecovering the peak-window shift alone claws back roughly **₹12.6 lakh** today. Attribution confidence **93%**, based on 18,420 metered signals.`;
-  if (s.includes("reduce") || s.includes("bill"))
-    return `Four actions with the highest expected value for the remaining operating day:\n\n• Charge the battery bank to 85% before 14:00 while marginal solar sits at ₹2.10/kWh — **₹4.1 lakh**.\n• Discharge 60 MW across 18:00–21:00 instead of importing — **₹12.6 lakh**.\n• Defer the non-critical pickling line by 90 minutes — **₹2.3 lakh**.\n• Hold diesel at standby; captive unit 3 is ₹13.0/kWh cheaper — **₹1.8 lakh**.\n\nCombined: **₹20.8 lakh** with 68 tCO₂ avoided and no reliability impact.`;
-  if (s.includes("battery"))
-    return `The battery is charging because the optimiser sees a negative net-cost window. Solar surplus is 62 MW above internal load, marginal charge cost is ₹2.10/kWh, and the forecast discharge value at 18:40 is ₹11.80/kWh — a 5.6× arbitrage spread. Charging stops automatically at 85% SoC to preserve a 40% reserve for grid ride-through. Confidence **94%**.`;
-  if (s.includes("grid") && s.includes("fail"))
-    return `Simulated N-1 grid loss at present load (${"~"}500 MW):\n\n• Captive plant ramps 92 → 168 MW in 45 seconds.\n• Battery bridges the gap at 70 MW for 26 minutes.\n• Two 15 MW gensets auto-start at T+90 s.\n• Non-critical load shed: 48 MW (coke oven fans, auxiliary lighting).\n\n**Result:** blast furnace and BOF stay energised. Reliability score 96.4%, incremental cost ₹9.4 lakh per hour of islanded operation.`;
-  if (s.includes("carbon") || s.includes("co2") || s.includes("saved"))
-    return `Today you avoided **86.4 tCO₂** against the FY24 grid-intensity baseline: 51.2 t from solar, 22.6 t from wind, 9.1 t from battery arbitrage displacing peak coal generation, and 3.5 t from diesel avoidance. Month-to-date avoidance is 2,148 t — 12.4% ahead of the sustainability target.`;
-  return `Here's what I see across the plant right now: demand is tracking the forecast within 1.8%, renewables cover a healthy share of load, and no source is operating outside its safe envelope. Ask me about cost drivers, battery strategy, grid contingencies, or carbon performance and I'll break down the numbers.`;
+interface ChatMessage {
+  id: string;
+  role: MessageRole;
+  text: string;
+  decision?: {
+    grid: number;
+    solar: number;
+    wind: number;
+    battery: number;
+    generator: number;
+  };
+  impact?: {
+    costSaved: string;
+    co2Avoided: string;
+    reliability: string;
+    confidence: number;
+  };
+  actionLink?: {
+    label: string;
+    route?: string;
+    scenarioId?: string;
+  };
 }
 
-function Copilot() {
-  const s = useLiveEnergy(4000);
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      role: "assistant",
-      text: "Good day. I'm your IntelliGrid copilot — I'm watching 1,284 sensors across six energy sources. Ask me anything about cost, carbon, reliability or dispatch strategy.",
-    },
-  ]);
+const quickQuestions = [
+  "Why is my energy cost high?",
+  "Should we charge the battery now?",
+  "What happens if solar drops 30%?",
+  "How can we reduce CO₂ today?",
+  "Why did AI choose the grid?",
+  "Can the plant survive a battery failure?",
+];
+
+function CopilotPage() {
+  const navigate = useNavigate();
+  const energyState = useEnergyState();
+  const { runSimulationScenario } = energyState;
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [thinkingStep, setThinkingStep] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thinking]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, thinkingStep]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  // Generate intelligent response based on current live energy context
+  const getAIResponse = (query: string): ChatMessage => {
+    const q = query.toLowerCase();
 
-  const send = (text: string) => {
-    const q = text.trim();
-    if (!q || thinking) return;
-    setMessages((m) => [...m, { role: "user", text: q }]);
+    // What-If: Battery Failure
+    if (q.includes("battery") && (q.includes("fail") || q.includes("survive") || q.includes("down"))) {
+      runSimulationScenario("battery_failure");
+      return {
+        id: Date.now().toString(),
+        role: "assistant",
+        text: `Battery BESS-1 is currently unavailable (0 MWh capacity).\n\nI have recalculated the plant dispatch model:\n\n• Solar PV output: ${energyState.solarMW} MW\n• Wind farm output: ${energyState.windMW} MW\n• Grid import step-up: ${energyState.gridMW + 80} MW\n• Diesel generator backup: 25 MW auto-started\n• Power reliability: 99.97% maintained across critical mills.\n\nRisk Assessment:\nLoss of battery arbitrage increases peak ToD exposure by ₹1.8 L/hour. Generator-1 is held in hot standby to absorb sudden load steps.`,
+        decision: {
+          grid: energyState.gridMW + 80,
+          solar: energyState.solarMW,
+          wind: energyState.windMW,
+          battery: 0,
+          generator: 25,
+        },
+        impact: {
+          costSaved: "+₹1.8 L/hr cost exposure",
+          co2Avoided: "+42 t/hr CO₂",
+          reliability: "99.97%",
+          confidence: 94,
+        },
+        actionLink: {
+          label: "View What-If Simulation details →",
+          scenarioId: "battery_failure",
+        },
+      };
+    }
+
+    // What-If: Solar Drop
+    if (q.includes("solar") && (q.includes("drop") || q.includes("cloud") || q.includes("30%") || q.includes("50%"))) {
+      runSimulationScenario("solar_drop");
+      return {
+        id: Date.now().toString(),
+        role: "assistant",
+        text: `Simulated 50% solar PV drop (convective cloud cover over solar park).\n\nAutomated AI Response Plan:\n• Solar output drops from 145 MW → 50 MW.\n• BESS-1 discharges +27.5 MW additional stored energy (<20 ms response).\n• Grid import ramps +45 MW to cover thermal deficit.\n• No load shed required for rolling mills.`,
+        decision: {
+          grid: energyState.gridMW + 45,
+          solar: 50,
+          wind: energyState.windMW,
+          battery: energyState.batteryMW + 28,
+          generator: 0,
+        },
+        impact: {
+          costSaved: "₹82,000/hr tariff exposure",
+          co2Avoided: "18.4 t/hr CO₂",
+          reliability: "99.99%",
+          confidence: 96,
+        },
+        actionLink: {
+          label: "Open Scenario Optimizer →",
+          route: "/app/scenarios",
+        },
+      };
+    }
+
+    // Question: Why grid?
+    if (q.includes("grid") || q.includes("why did ai choose")) {
+      return {
+        id: Date.now().toString(),
+        role: "assistant",
+        text: `Grid power was selected for the current 15-minute interval because:\n\n• Solar generation is currently tracking at ${energyState.solarMW} MW.\n• Wind generation (${energyState.windMW} MW) is insufficient to cover the ${energyState.totalDemandMW} MW plant demand.\n• Battery SOC (${energyState.batterySOC}%) is being preserved for the upcoming 18:00–21:00 evening peak ToD tariff window.\n• Grid import currently provides the lowest reliable marginal cost (₹8.10/kWh shoulder rate vs ₹18.40/kWh diesel generation).`,
+        decision: {
+          grid: energyState.gridMW,
+          solar: energyState.solarMW,
+          wind: energyState.windMW,
+          battery: energyState.batteryMW,
+          generator: energyState.generatorMW,
+        },
+        impact: {
+          costSaved: energyState.energyCostSavedFormatted,
+          co2Avoided: energyState.co2AvoidedFormatted,
+          reliability: `${energyState.reliability}%`,
+          confidence: 94,
+        },
+        actionLink: {
+          label: "View decision details →",
+          route: "/app/scenarios",
+        },
+      };
+    }
+
+    // Question: Why cost high?
+    if (q.includes("cost") || q.includes("high") || q.includes("bill")) {
+      return {
+        id: Date.now().toString(),
+        role: "assistant",
+        text: `Plant energy cost rate is currently ₹11.80/kWh due to Time-of-Day (ToD) peak pricing.\n\nPrimary Drivers:\n1. Peak ToD Tariff Window — High grid rate step-up.\n2. Heavy Industrial Load — Rolling mill #2 running at 100% capacity (${energyState.totalDemandMW} MW total demand).\n3. Solar Yield — Contributing ${energyState.solarMW} MW (28% of total mix).\n\nAI Optimization Recommendation:\nDischarge BESS-1 to cap peak grid demand above 350 MW and save ₹41,200 during this interval.`,
+        decision: {
+          grid: energyState.gridMW,
+          solar: energyState.solarMW,
+          wind: energyState.windMW,
+          battery: energyState.batteryMW,
+          generator: energyState.generatorMW,
+        },
+        impact: {
+          costSaved: "₹41,200 potential saving",
+          co2Avoided: "18.4 t avoided",
+          reliability: "99.97%",
+          confidence: 95,
+        },
+        actionLink: {
+          label: "Optimize Energy Costs →",
+          route: "/app/scenarios",
+        },
+      };
+    }
+
+    // Question: Charge battery?
+    if (q.includes("battery") && (q.includes("charge") || q.includes("should"))) {
+      return {
+        id: Date.now().toString(),
+        role: "assistant",
+        text: `Yes, charging the battery bank to 85% is strongly recommended.\n\nReasoning:\n• Solar surplus is available at ₹2.10/kWh.\n• Evening peak ToD grid rate will rise to ₹11.80/kWh.\n• Spread arbitrage yields ₹4.1 L daily net savings.\n• 15% SOC headroom is maintained for voltage stabilization.`,
+        decision: {
+          grid: energyState.gridMW,
+          solar: energyState.solarMW,
+          wind: energyState.windMW,
+          battery: 62,
+          generator: 0,
+        },
+        impact: {
+          costSaved: "₹4.1 L/day net saving",
+          co2Avoided: "34.2 t/day avoided",
+          reliability: "100.0%",
+          confidence: 97,
+        },
+        actionLink: {
+          label: "Execute Battery Charge →",
+          route: "/app/scenarios",
+        },
+      };
+    }
+
+    // Default fallback response
+    return {
+      id: Date.now().toString(),
+      role: "assistant",
+      text: `I am continuously analyzing live telemetry across Tata Steel Jamshedpur.\n\nCurrent Operational Status:\n• Plant Demand: ${energyState.totalDemandMW} MW\n• Renewable Share: ${energyState.renewableUtilization}%\n• Power Reliability: ${energyState.reliability}%\n• Grid Import: ${energyState.gridMW} MW\n\nAsk me about cost drivers, battery dispatch, What-If outage simulations, or CO₂ reduction targets.`,
+      decision: {
+        grid: energyState.gridMW,
+        solar: energyState.solarMW,
+        wind: energyState.windMW,
+        battery: energyState.batteryMW,
+        generator: energyState.generatorMW,
+      },
+      impact: {
+        costSaved: energyState.energyCostSavedFormatted,
+        co2Avoided: energyState.co2AvoidedFormatted,
+        reliability: `${energyState.reliability}%`,
+        confidence: 93,
+      },
+    };
+  };
+
+  const handleSendMessage = (textToSend?: string) => {
+    const queryText = (textToSend || input).trim();
+    if (!queryText || thinkingStep) return;
+
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      text: queryText,
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setThinking(true);
+
+    // Simulate multi-step AI thinking
+    setThinkingStep("Analyzing live plant telemetry...");
     setTimeout(() => {
-      setMessages((m) => [...m, { role: "assistant", text: answerFor(q) }]);
-      setThinking(false);
-      inputRef.current?.focus();
-    }, 900);
+      setThinkingStep("Evaluating available energy sources & tariffs...");
+    }, 400);
+    setTimeout(() => {
+      setThinkingStep("Calculating optimal dispatch model...");
+    }, 800);
+    setTimeout(() => {
+      const responseMsg = getAIResponse(queryText);
+      setMessages((prev) => [...prev, responseMsg]);
+      setThinkingStep(null);
+    }, 1200);
+  };
+
+  const toggleMic = () => {
+    setIsListening(true);
+    setInput("Should we charge the battery now?");
+    setTimeout(() => {
+      setIsListening(false);
+    }, 1500);
   };
 
   return (
-    <div>
-      <PageHeader
-        title="AI Energy Copilot"
-        subtitle="Reasoning over live telemetry, tariffs, weather and asset health"
-        right={<StatusPill status={`Context: ${s.demand.toFixed(0)} MW live`} tone="cyan" />}
-      />
+    <div className="space-y-6 pb-12">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1F2937]">
+            AI Energy Copilot
+          </h1>
+          <p className="text-xs sm:text-sm text-[#6B7280]">
+            Reasoning over live telemetry, ToD tariffs, weather forecasts and asset health
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full bg-[#E8F5E9] px-3.5 py-1.5 text-xs font-bold text-[#1B4D3E] border border-emerald-200 w-fit">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Context: {energyState.totalDemandMW} MW live</span>
+        </div>
+      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <GlassCard className="flex h-[640px] flex-col p-0">
-          <div className="flex items-center gap-3 border-b border-border/60 px-5 py-4">
-            <AiBrain className="h-9 w-9" />
-            <div>
-              <p className="text-sm font-semibold">IntelliGrid Copilot</p>
-              <p className="text-xs text-muted-foreground">Online · reasoning model active</p>
+      {/* Main 2-Column Grid: 68% Left Copilot Panel | 32% Right Explainable Recommendations */}
+      <div className="grid grid-cols-1 xl:grid-cols-[68%_32%] gap-6 items-start">
+        
+        {/* LEFT COLUMN: MAIN COPILOT PANEL */}
+        <div className="rounded-3xl bg-white border border-[#E6E1D7] shadow-xs flex flex-col h-[740px] overflow-hidden">
+          
+          {/* Panel Header & Live Telemetry Context Bar */}
+          <div className="border-b border-[#F3F0EA] p-4 bg-[#FAF8F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#1B4D3E] text-white">
+                <Sparkles className="h-5 w-5 fill-white" />
+              </div>
+              <div>
+                <h3 className="font-display text-base font-bold text-[#1F2937]">
+                  IntelliGrid Copilot
+                </h3>
+                <p className="text-xs text-[#6B7280]">Online · Industrial Reasoning Engine Active</p>
+              </div>
+            </div>
+
+            {/* Live Plant Context Badges */}
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-ping" />
+                LIVE TELEMETRY
+              </span>
+              <span className="rounded-xl bg-white border border-[#E6E1D7] px-2 py-1 text-[#1F2937]">
+                Demand: <strong className="text-[#1B4D3E]">{energyState.totalDemandMW} MW</strong>
+              </span>
+              <span className="rounded-xl bg-white border border-[#E6E1D7] px-2 py-1 text-[#1F2937]">
+                Solar: <strong className="text-amber-600">{energyState.solarMW} MW</strong>
+              </span>
+              <span className="rounded-xl bg-white border border-[#E6E1D7] px-2 py-1 text-[#1F2937]">
+                Wind: <strong className="text-sky-600">{energyState.windMW} MW</strong>
+              </span>
+              <span className="rounded-xl bg-white border border-[#E6E1D7] px-2 py-1 text-[#1F2937]">
+                BESS: <strong className="text-emerald-700">{energyState.batterySOC}%</strong>
+              </span>
             </div>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-            {messages.map((m, i) => (
+          {/* Chat Messages Body */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            
+            {/* Welcome State when no messages */}
+            {messages.length === 0 && (
+              <div className="my-6 rounded-3xl bg-[#FAF8F5] border border-[#E6E1D7] p-6 space-y-3">
+                <h3 className="font-display text-xl font-bold text-[#1F2937]">
+                  Good evening. I'm your IntelliGrid Copilot.
+                </h3>
+                <p className="text-xs sm:text-sm text-[#4B5563]">
+                  I'm monitoring your plant's energy demand, solar, wind, battery, grid and backup generation in real time.
+                </p>
+                <p className="text-xs text-[#6B7280] font-medium">
+                  Ask me about cost, carbon, reliability, forecasting or energy dispatch.
+                </p>
+              </div>
+            )}
+
+            {/* Chat Conversation Messages */}
+            {messages.map((msg) => (
               <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 8 }}
+                key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={m.role === "user" ? "flex justify-end" : "flex"}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                {m.role === "user" ? (
-                  <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-                    {m.text}
+                {msg.role === "user" ? (
+                  <div className="max-w-[80%] rounded-3xl rounded-br-sm bg-[#1B4D3E] text-white px-5 py-3 text-xs sm:text-sm font-medium shadow-xs">
+                    {msg.text}
                   </div>
                 ) : (
-                  <div className="max-w-[85%] whitespace-pre-line text-sm leading-relaxed text-foreground">
-                    {m.text.split("**").map((chunk, j) =>
-                      j % 2 ? (
-                        <strong key={j} className="text-eco">
-                          {chunk}
-                        </strong>
-                      ) : (
-                        <span key={j}>{chunk}</span>
-                      ),
+                  <div className="max-w-[90%] rounded-3xl rounded-bl-sm bg-[#FAF8F5] border border-[#E6E1D7] p-5 text-xs sm:text-sm text-[#1F2937] space-y-4 shadow-xs">
+                    <div className="whitespace-pre-line leading-relaxed font-normal">
+                      {msg.text}
+                    </div>
+
+                    {/* Decision Breakdown Grid */}
+                    {msg.decision && (
+                      <div className="rounded-2xl bg-white border border-[#E6E1D7] p-3.5 space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+                          Optimal Source Dispatch:
+                        </span>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                          <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
+                            <span className="text-[10px] text-[#6B7280] block">GRID</span>
+                            <span className="font-bold text-[#2563EB]">{msg.decision.grid} MW</span>
+                          </div>
+                          <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
+                            <span className="text-[10px] text-[#6B7280] block">SOLAR</span>
+                            <span className="font-bold text-amber-600">{msg.decision.solar} MW</span>
+                          </div>
+                          <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
+                            <span className="text-[10px] text-[#6B7280] block">WIND</span>
+                            <span className="font-bold text-sky-600">{msg.decision.wind} MW</span>
+                          </div>
+                          <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
+                            <span className="text-[10px] text-[#6B7280] block">BATTERY</span>
+                            <span className="font-bold text-emerald-600">{msg.decision.battery} MW</span>
+                          </div>
+                          <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
+                            <span className="text-[10px] text-[#6B7280] block">GENSET</span>
+                            <span className="font-bold text-rose-600">{msg.decision.generator} MW</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expected Impact Pills */}
+                    {msg.impact && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs pt-1 border-t border-[#E6E1D7]">
+                        <span className="font-bold text-[#1B4D3E] bg-[#E8F5E9] px-2.5 py-1 rounded-xl">
+                          Cost: {msg.impact.costSaved}
+                        </span>
+                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl">
+                          CO₂: {msg.impact.co2Avoided}
+                        </span>
+                        <span className="font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-xl">
+                          Reliability: {msg.impact.reliability}
+                        </span>
+                        <span className="font-bold text-[#6B7280] bg-white border border-[#E6E1D7] px-2.5 py-1 rounded-xl">
+                          Confidence: {msg.impact.confidence}%
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Action Link Button */}
+                    {msg.actionLink && (
+                      <button
+                        onClick={() => {
+                          if (msg.actionLink?.route) {
+                            navigate({ to: msg.actionLink.route as any });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1B4D3E] hover:underline pt-1 cursor-pointer"
+                      >
+                        <span>{msg.actionLink.label}</span>
+                      </button>
                     )}
                   </div>
                 )}
               </motion.div>
             ))}
-            {thinking ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Sparkle className="h-4 w-4 animate-pulse text-cyan" />
-                Analysing dispatch, tariffs and forecasts…
-              </div>
-            ) : null}
-            <div ref={endRef} />
+
+            {/* AI Multi-Step Thinking Indicator */}
+            {thinkingStep && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center gap-2.5 text-xs font-semibold text-[#1B4D3E] bg-[#E8F5E9] p-3 rounded-2xl border border-emerald-200 w-fit"
+              >
+                <Sparkles className="h-4 w-4 animate-spin text-emerald-600" />
+                <span>{thinkingStep}</span>
+              </motion.div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
 
-          <div className="border-t border-border/60 p-4">
-            <div className="mb-3 flex flex-wrap gap-2">
-              {suggestions.map((q) => (
+          {/* Sticky Bottom Input Section */}
+          <div className="p-4 border-t border-[#F3F0EA] bg-[#FAF8F5] space-y-3">
+            
+            {/* Quick Suggestions Chips */}
+            <div className="flex flex-wrap gap-2">
+              {quickQuestions.map((q) => (
                 <button
                   key={q}
-                  onClick={() => send(q)}
-                  className="rounded-full border border-border/70 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-cyan/40 hover:text-foreground"
+                  onClick={() => handleSendMessage(q)}
+                  className="rounded-full bg-white border border-[#E6E1D7] px-3 py-1.5 text-xs text-[#4B5563] hover:text-[#1B4D3E] hover:border-[#1B4D3E] transition-all cursor-pointer shadow-2xs font-medium"
                 >
                   {q}
                 </button>
               ))}
             </div>
+
+            {/* Textarea Input Form */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                send(input);
+                handleSendMessage();
               }}
-              className="flex items-end gap-2 rounded-2xl border border-input bg-muted/40 p-2"
+              className="flex items-end gap-2 rounded-2xl border border-[#E6E1D7] bg-white p-2.5 shadow-xs focus-within:border-[#1B4D3E] focus-within:ring-1 focus-within:ring-[#1B4D3E] transition-all"
             >
               <textarea
                 ref={inputRef}
@@ -171,32 +491,58 @@ function Copilot() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    send(input);
+                    handleSendMessage();
                   }
                 }}
                 rows={2}
-                placeholder="Ask the copilot about cost, carbon, battery or grid contingencies…"
-                className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
+                placeholder="Ask IntelliGrid anything about your plant's energy..."
+                className="flex-1 resize-none bg-transparent px-2 py-1 text-xs sm:text-sm outline-none placeholder:text-[#9CA3AF] text-[#1F2937]"
               />
-              <button
-                type="submit"
-                disabled={thinking}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-gradient text-primary-foreground disabled:opacity-50"
-                aria-label="Send"
-              >
-                <Send className="h-4 w-4" />
-              </button>
+
+              <div className="flex items-center gap-1.5 pb-1">
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  className={`grid h-9 w-9 place-items-center rounded-xl border transition-all cursor-pointer ${
+                    isListening
+                      ? "bg-rose-50 text-rose-600 border-rose-200 animate-pulse"
+                      : "bg-[#FAF8F5] text-[#6B7280] border-[#E6E1D7] hover:text-[#1F2937]"
+                  }`}
+                  aria-label="Voice input"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={!input.trim() || !!thinkingStep}
+                  className="grid h-9 w-9 place-items-center rounded-xl bg-[#1B4D3E] text-white hover:bg-[#133E32] disabled:opacity-40 transition-all cursor-pointer shadow-xs"
+                  aria-label="Send"
+                >
+                  <Send className="h-4 w-4 fill-white" />
+                </button>
+              </div>
             </form>
           </div>
-        </GlassCard>
 
+        </div>
+
+        {/* RIGHT COLUMN: EXPLAINABLE RECOMMENDATIONS (32% width) */}
         <div className="space-y-4">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            Explainable recommendations
-          </p>
-          {smartRecommendations.slice(0, 3).map((rec, i) => (
-            <ExplainableCard key={rec.id} rec={rec} delay={0.1 + i * 0.05} />
-          ))}
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-sm font-bold uppercase tracking-wider text-[#6B7280]">
+              Explainable Recommendations
+            </h3>
+            <span className="text-[10px] font-bold text-[#1B4D3E] bg-[#E8F5E9] px-2 py-0.5 rounded-full">
+              Live Optimized
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {smartRecommendations.slice(0, 3).map((rec, i) => (
+              <ExplainableCard key={rec.id} rec={rec} delay={0.1 + i * 0.05} />
+            ))}
+          </div>
         </div>
 
       </div>
