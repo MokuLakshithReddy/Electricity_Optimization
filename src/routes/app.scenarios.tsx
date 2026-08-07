@@ -103,7 +103,7 @@ function Scenarios() {
               className={`glass rounded-2xl p-4 text-left transition-all ${
                 active ? "ring-2" : "opacity-85 hover:opacity-100"
               }`}
-              style={active ? ({ ["--tw-ring-color" as string]: toneColor[s.tone] } as never) : undefined}
+              style={{ ["--tw-ring-color" as string]: active ? toneColor[s.tone] : "transparent" } as never}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>

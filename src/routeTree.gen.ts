@@ -20,6 +20,7 @@ import { Route as AppEnergyFlowRouteImport } from './routes/app.energy-flow'
 import { Route as AppExecutiveRouteImport } from './routes/app.executive'
 import { Route as AppForecastsRouteImport } from './routes/app.forecasts'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppScenariosRouteImport } from './routes/app.scenarios'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
 
 const IndexRoute = IndexRouteImport.update({
@@ -77,6 +78,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppScenariosRoute = AppScenariosRouteImport.update({
+  id: '/scenarios',
+  path: '/scenarios',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/app/executive': typeof AppExecutiveRoute
   '/app/forecasts': typeof AppForecastsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/': typeof AppIndexRoute
 }
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/app/executive': typeof AppExecutiveRoute
   '/app/forecasts': typeof AppForecastsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
   '/app': typeof AppIndexRoute
 }
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/app/executive': typeof AppExecutiveRoute
   '/app/forecasts': typeof AppForecastsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/': typeof AppIndexRoute
 }
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/app/executive'
     | '/app/forecasts'
     | '/app/reports'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
     | '/app/executive'
     | '/app/forecasts'
     | '/app/reports'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app'
   id:
@@ -165,6 +176,7 @@ export interface FileRouteTypes {
     | '/app/executive'
     | '/app/forecasts'
     | '/app/reports'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app/'
   fileRoutesById: FileRoutesById
@@ -253,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/scenarios': {
+      id: '/app/scenarios'
+      path: '/scenarios'
+      fullPath: '/app/scenarios'
+      preLoaderRoute: typeof AppScenariosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/settings': {
       id: '/app/settings'
       path: '/settings'
@@ -272,6 +291,7 @@ interface AppRouteChildren {
   AppExecutiveRoute: typeof AppExecutiveRoute
   AppForecastsRoute: typeof AppForecastsRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppScenariosRoute: typeof AppScenariosRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -285,6 +305,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppExecutiveRoute: AppExecutiveRoute,
   AppForecastsRoute: AppForecastsRoute,
   AppReportsRoute: AppReportsRoute,
+  AppScenariosRoute: AppScenariosRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
 }
