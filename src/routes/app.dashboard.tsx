@@ -289,31 +289,11 @@ function Dashboard() {
       <div className="mt-4">
         <div className="mb-3 flex items-center gap-2">
           <GaugeIcon className="h-4 w-4 text-cyan" />
-          <h2 className="text-base font-semibold">AI recommendations</h2>
+          <h2 className="text-base font-semibold">Explainable AI recommendations</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {recommendations.map((r, i) => (
-            <GlassCard key={r.title} delay={0.5 + i * 0.04}>
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-semibold">{r.title}</h3>
-                <StatusPill status={`${r.confidence}%`} tone="cyan" />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">{r.reason}</p>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <p className="text-muted-foreground">Expected savings</p>
-                  <p className="font-display text-base font-semibold text-eco">
-                    {r.savings ? inr(r.savings) : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Carbon reduction</p>
-                  <p className="font-display text-base font-semibold text-cyan">
-                    {r.carbon ? `${r.carbon} t` : "—"}
-                  </p>
-                </div>
-              </div>
-            </GlassCard>
+          {smartRecommendations.slice(0, 5).map((rec, i) => (
+            <ExplainableCard key={rec.id} rec={rec} delay={0.5 + i * 0.04} />
           ))}
           <GlassCard delay={0.7} className="flex items-center gap-4">
             <Factory className="h-9 w-9 text-primary" />
@@ -329,6 +309,11 @@ function Dashboard() {
           </GlassCard>
         </div>
       </div>
+
+      <GlassCard className="mt-4" delay={0.75}>
+        <RecommendationTimeline compact />
+      </GlassCard>
+
     </div>
   );
 }
