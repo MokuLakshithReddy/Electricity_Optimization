@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { Activity } from "lucide-react";
 import { HeroHeader } from "@/components/HeroHeader";
 import { KpiCard, KpiCardData } from "@/components/KpiCard";
 import { LiveEnergyStatus } from "@/components/LiveEnergyStatus";
@@ -10,6 +11,7 @@ import { UpcomingDecisions } from "@/components/UpcomingDecisions";
 import { ImpactSummary } from "@/components/ImpactSummary";
 import { SourceMixSection } from "@/components/SourceMixSection";
 import { WhatIfSimulatorModal } from "@/components/WhatIfSimulatorModal";
+import { ScadaModal } from "@/components/ScadaModal";
 import { plantLocations, PlantLocation } from "@/data/energyData";
 import { useEnergyState } from "@/context/EnergyContext";
 
@@ -39,6 +41,7 @@ function DashboardContent() {
   const [selectedPlant, setSelectedPlant] = useState<PlantLocation>(plantLocations[0]);
   const [selectedDate, setSelectedDate] = useState("8 Aug 2026");
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [scadaOpen, setScadaOpen] = useState(false);
 
   // Dynamic KPI data bound directly to live central EnergyContext state
   const dynamicKpis: KpiCardData[] = [
@@ -86,6 +89,31 @@ function DashboardContent() {
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
       />
+
+      {/* Live SCADA Telemetry & Industrial Interlock Banner */}
+      <div className="bg-[#1B4D3E]/5 border border-[#1B4D3E]/20 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <div>
+            <div className="text-xs font-semibold text-[#1B4D3E] uppercase tracking-wider flex items-center gap-2">
+              <span>Industrial SCADA Telemetry & Equipment Safety Interlocks</span>
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-mono">
+                Modbus/OPC-UA Live
+              </span>
+            </div>
+            <div className="text-xs text-[#6B7280]">
+              5 Factory Submeter Registers • Inverter Frequency 50.02 Hz • BESS Thermal Safe • Watchdog: Heartbeat Normal
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => setScadaOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#1B4D3E] hover:bg-[#153e32] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+        >
+          <Activity className="h-3.5 w-3.5" />
+          Open SCADA & Dispatch Console
+        </button>
+      </div>
 
       {/* Main Grid: Left/Center Analytics (2 cols on xl) + Right Insights (1 col on xl) */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start min-w-0">
@@ -140,6 +168,12 @@ function DashboardContent() {
       <WhatIfSimulatorModal
         isOpen={simulatorOpen}
         onClose={() => setSimulatorOpen(false)}
+      />
+
+      {/* Industrial SCADA & Equipment Interlocks Modal */}
+      <ScadaModal
+        isOpen={scadaOpen}
+        onClose={() => setScadaOpen(false)}
       />
     </div>
   );

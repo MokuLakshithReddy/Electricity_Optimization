@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useState, useMemo, ReactNode, useEffect, useCallback } from "react";
 import { emissionFactors, tariffRates } from "@/data/emissionFactors";
+import { solveEconomicDispatch, OptimizationResult, DEFAULT_CONSTRAINTS } from "@/lib/optimizationEngine";
 
 export type EnergyState = {
   totalDemandMW: number;
@@ -14,7 +15,7 @@ export type EnergyState = {
 
   batterySOC: number;
 
-  // Computed Values
+  // Computed Values from Constrained Optimization
   renewableUtilization: number; // %
   energyCostSavedDaily: number; // ₹
   energyCostSavedFormatted: string;
@@ -23,6 +24,14 @@ export type EnergyState = {
   reliability: number; // %
   reliabilityStatus: string;
   gridRequirement: number; // MW
+
+  // Constrained Solver Telemetry
+  optimizationTelemetry: OptimizationResult;
+  activeConstraints: string[];
+  hourlySavings: number;
+  baselineCostPerHour: number;
+  optimizedCostPerHour: number;
+  currentTariffTier: "Peak" | "Shoulder" | "OffPeak";
 
   // Historical sparkline arrays
   costSavedHistory: number[];
@@ -39,8 +48,10 @@ export type EnergyContextType = EnergyState & {
   updateCaptiveMW: (mw: number) => void;
   updateGeneratorMW: (mw: number) => void;
   setTotalDemandMW: (mw: number) => void;
+  setTariffTier: (tier: "Peak" | "Shoulder" | "OffPeak") => void;
   runSimulationScenario: (scenario: string) => void;
   resetToBaseline: () => void;
+  applyOptimalSchedule: () => void;
 };
 
 const initialSparklines = {
@@ -63,62 +74,48 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   const [captive, setCaptive] = useState(43);
   const [generator, setGenerator] = useState(10);
   const [batterySOC, setBatterySOC] = useState(72);
+  const [tariffTier, setTariffTier] = useState<"Peak" | "Shoulder" | "OffPeak">("Peak");
 
   const [sparklines, setSparklines] = useState(initialSparklines);
 
-  // Dynamic calculations based on state & emission factors
+  // Run the true Mathematical Constrained Economic Dispatch Optimization Solver
+  const optimizationResult = useMemo(() => {
+    return solveEconomicDispatch({
+      demandMW,
+      solarAvailableMW: solar,
+      windAvailableMW: wind,
+      currentBatterySOC: batterySOC,
+      currentTariffTier: tariffTier,
+      isGridAvailable: grid > 0 || tariffTier !== "OffPeak",
+    });
+  }, [demandMW, solar, wind, batterySOC, tariffTier, grid]);
+
+  // Dynamic calculations based on state, emission factors & solver
   const computedState = useMemo(() => {
-    // 1. Renewable Utilization %
     const renewableMW = solar + wind;
-    const renewableUtilization = Number((Math.min(100, (renewableMW / Math.max(1, demandMW)) * 100)).toFixed(1));
+    const renewableUtilization = Number(
+      (Math.min(100, (renewableMW / Math.max(1, demandMW)) * 100)).toFixed(1)
+    );
 
-    // 2. Energy Cost Saved
-    const baselineCostPerHour = demandMW * tariffRates.gridPeak * 1000;
-    const optimizedCostPerHour =
-      (solar * tariffRates.solar +
-        wind * tariffRates.wind +
-        battery * tariffRates.battery +
-        grid * tariffRates.gridShoulder +
-        captive * tariffRates.captive +
-        generator * tariffRates.generator) *
-      1000;
-
-    const hourlySavings = Math.max(0, baselineCostPerHour - optimizedCostPerHour);
-    const energyCostSavedDaily = hourlySavings * 24;
-
-    // Formatted Lakhs string e.g. ₹12.4 L
+    // True verified savings from the mathematical optimization solver
+    const hourlySavings = optimizationResult.hourlySavings;
+    const energyCostSavedDaily = optimizationResult.dailySavingsEstimate;
     const lakhs = (energyCostSavedDaily / 100000).toFixed(1);
     const energyCostSavedFormatted = `₹${lakhs} L`;
 
-    // 3. CO2 Avoided
-    const baselineCO2PerHour = demandMW * emissionFactors.grid;
-    const optimizedCO2PerHour =
-      solar * emissionFactors.solar +
-      wind * emissionFactors.wind +
-      battery * emissionFactors.battery +
-      grid * emissionFactors.grid +
-      captive * emissionFactors.captive +
-      generator * emissionFactors.generator;
-
-    const hourlyCO2Avoided = Math.max(0, baselineCO2PerHour - optimizedCO2PerHour);
-    const co2AvoidedDaily = Number((hourlyCO2Avoided * 24).toFixed(0));
+    // Verified avoided CO2 from the solver
+    const co2AvoidedDaily = Math.round(optimizationResult.co2AvoidedPerHour * 24);
     const co2AvoidedFormatted = `${co2AvoidedDaily} t`;
 
-    // 4. Power Reliability
+    // Reliability accounting for spinning reserves and technical minimums
     const totalSupplyMW = solar + wind + battery + grid + captive + generator;
-    let reliability = 99.97;
-    let reliabilityStatus = "Critical load protected";
+    let reliability = optimizationResult.reliabilityPct;
+    let reliabilityStatus = optimizationResult.reliabilityStatus;
 
     if (totalSupplyMW < demandMW) {
       const deficitRatio = totalSupplyMW / Math.max(1, demandMW);
       reliability = Number(Math.max(65.0, deficitRatio * 99.97).toFixed(2));
       reliabilityStatus = `Supply Deficit (${(demandMW - totalSupplyMW).toFixed(0)} MW gap)`;
-    } else if (totalSupplyMW >= demandMW + 30) {
-      reliability = 99.97;
-      reliabilityStatus = "Critical load protected";
-    } else {
-      reliability = 98.4;
-      reliabilityStatus = "Tight Reserve Margin";
     }
 
     return {
@@ -130,11 +127,14 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       reliability,
       reliabilityStatus,
       gridRequirement: Math.max(0, demandMW - solar - wind - battery - captive),
+      hourlySavings,
+      baselineCostPerHour: optimizationResult.baselineCostPerHour,
+      optimizedCostPerHour: optimizationResult.totalCostPerHour,
     };
-  }, [demandMW, solar, wind, battery, grid, captive, generator]);
+  }, [demandMW, solar, wind, battery, grid, captive, generator, optimizationResult]);
 
   // Update sparklines when state changes
-  const updateSparklines = (
+  const updateSparklines = useCallback((
     newCostSaved: number,
     newCO2: number,
     newRenewable: number,
@@ -147,11 +147,10 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       renewableHistory: [...prev.renewableHistory.slice(1), newRenewable],
       reliabilityHistory: [...prev.reliabilityHistory.slice(1), newRel],
     }));
-  };
+  }, []);
 
   const updateSolarMW = (mw: number) => {
     setSolar(mw);
-    // Auto adjust grid to balance demand if needed
     const deficit = demandMW - (mw + wind + battery + captive);
     const newGrid = Math.max(0, deficit);
     setGrid(newGrid);
@@ -176,11 +175,13 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   };
 
   const updateBatteryMW = (mw: number) => {
-    setBattery(mw);
-    const deficit = demandMW - (solar + wind + mw + captive);
-    if (deficit > 200) {
-      setGrid(200);
-      setGenerator(Math.max(0, deficit - 200));
+    // Clamp to battery C-rate discharge capacity (90 MW)
+    const clamped = Math.min(DEFAULT_CONSTRAINTS.batteryMaxDischargeMW, Math.max(0, mw));
+    setBattery(clamped);
+    const deficit = demandMW - (solar + wind + clamped + captive);
+    if (deficit > DEFAULT_CONSTRAINTS.gridContractDemandMW) {
+      setGrid(DEFAULT_CONSTRAINTS.gridContractDemandMW);
+      setGenerator(Math.max(0, deficit - DEFAULT_CONSTRAINTS.gridContractDemandMW));
     } else {
       setGrid(Math.max(0, deficit));
       setGenerator(0);
@@ -190,43 +191,127 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   const updateGridMW = (mw: number) => {
     setGrid(mw);
     if (mw === 0) {
-      // Grid Outage! Emergency auto-response
+      // Grid Outage! Emergency islanding mode
       const remainingDeficit = Math.max(0, demandMW - (solar + wind + battery + captive));
       setGenerator(remainingDeficit);
     }
   };
 
-  const updateCaptiveMW = (mw: number) => setCaptive(mw);
+  const updateCaptiveMW = (mw: number) => {
+    // Respect captive minimum load (30 MW)
+    const val = Math.max(DEFAULT_CONSTRAINTS.captiveMinMW, mw);
+    setCaptive(val);
+  };
+
   const updateGeneratorMW = (mw: number) => setGenerator(mw);
+
+  // Directly apply mathematically solved optimal setpoints
+  const applyOptimalSchedule = () => {
+    const d = optimizationResult.dispatch;
+    setSolar(d.solarMW);
+    setWind(d.windMW);
+    setBattery(d.batteryDischargeMW);
+    setGrid(d.gridMW);
+    setCaptive(d.captiveMW);
+    setGenerator(d.generatorMW);
+    setBatterySOC(d.newBatterySOC);
+  };
 
   const runSimulationScenario = (scenario: string) => {
     switch (scenario) {
-      case "solar_drop":
+      case "solar_drop": {
         setSolar(50);
-        setGrid(251);
+        // Solve optimal dispatch with degraded solar
+        const opt = solveEconomicDispatch({
+          demandMW,
+          solarAvailableMW: 50,
+          windAvailableMW: wind,
+          currentBatterySOC: batterySOC,
+          currentTariffTier: tariffTier,
+        });
+        setGrid(opt.dispatch.gridMW);
+        setBattery(opt.dispatch.batteryDischargeMW);
+        setCaptive(opt.dispatch.captiveMW);
+        setGenerator(opt.dispatch.generatorMW);
         break;
-      case "battery_failure":
+      }
+      case "battery_failure": {
         setBattery(0);
-        setGrid(218);
-        setGenerator(0);
+        setBatterySOC(0);
+        const opt = solveEconomicDispatch({
+          demandMW,
+          solarAvailableMW: solar,
+          windAvailableMW: wind,
+          currentBatterySOC: 0,
+          currentTariffTier: tariffTier,
+          constraints: { batteryCapacityMWh: 0, batteryMaxDischargeMW: 0 },
+        });
+        setGrid(opt.dispatch.gridMW);
+        setCaptive(opt.dispatch.captiveMW);
+        setGenerator(opt.dispatch.generatorMW);
         break;
-      case "wind_drop":
+      }
+      case "wind_drop": {
         setWind(0);
-        setGrid(260);
+        const opt = solveEconomicDispatch({
+          demandMW,
+          solarAvailableMW: solar,
+          windAvailableMW: 0,
+          currentBatterySOC: batterySOC,
+          currentTariffTier: tariffTier,
+        });
+        setGrid(opt.dispatch.gridMW);
+        setBattery(opt.dispatch.batteryDischargeMW);
+        setCaptive(opt.dispatch.captiveMW);
+        setGenerator(opt.dispatch.generatorMW);
         break;
-      case "grid_failure":
+      }
+      case "grid_failure": {
         setGrid(0);
-        setCaptive(85);
-        setGenerator(65);
+        const opt = solveEconomicDispatch({
+          demandMW,
+          solarAvailableMW: solar,
+          windAvailableMW: wind,
+          currentBatterySOC: batterySOC,
+          currentTariffTier: tariffTier,
+          isGridAvailable: false,
+        });
+        setBattery(opt.dispatch.batteryDischargeMW);
+        setCaptive(opt.dispatch.captiveMW);
+        setGenerator(opt.dispatch.generatorMW);
         break;
-      case "demand_spike":
-        setDemandMW(650);
-        setGrid(286);
+      }
+      case "demand_spike": {
+        const spikeDemand = 650;
+        setDemandMW(spikeDemand);
+        const opt = solveEconomicDispatch({
+          demandMW: spikeDemand,
+          solarAvailableMW: solar,
+          windAvailableMW: wind,
+          currentBatterySOC: batterySOC,
+          currentTariffTier: tariffTier,
+        });
+        setGrid(opt.dispatch.gridMW);
+        setBattery(opt.dispatch.batteryDischargeMW);
+        setCaptive(opt.dispatch.captiveMW);
+        setGenerator(opt.dispatch.generatorMW);
         break;
-      case "battery_expansion":
-        setBattery(118);
-        setGrid(94);
+      }
+      case "battery_expansion": {
+        const opt = solveEconomicDispatch({
+          demandMW,
+          solarAvailableMW: solar,
+          windAvailableMW: wind,
+          currentBatterySOC: 90,
+          currentTariffTier: tariffTier,
+          constraints: { batteryCapacityMWh: 400, batteryMaxDischargeMW: 140 },
+        });
+        setBattery(opt.dispatch.batteryDischargeMW);
+        setGrid(opt.dispatch.gridMW);
+        setCaptive(opt.dispatch.captiveMW);
+        setGenerator(opt.dispatch.generatorMW);
         break;
+      }
       default:
         resetToBaseline();
         break;
@@ -242,6 +327,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     setCaptive(43);
     setGenerator(10);
     setBatterySOC(72);
+    setTariffTier("Peak");
   };
 
   return (
@@ -266,6 +352,13 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
         reliabilityStatus: computedState.reliabilityStatus,
         gridRequirement: computedState.gridRequirement,
 
+        optimizationTelemetry: optimizationResult,
+        activeConstraints: optimizationResult.activeConstraints,
+        hourlySavings: computedState.hourlySavings,
+        baselineCostPerHour: computedState.baselineCostPerHour,
+        optimizedCostPerHour: computedState.optimizedCostPerHour,
+        currentTariffTier: tariffTier,
+
         costSavedHistory: sparklines.costSavedHistory,
         co2AvoidedHistory: sparklines.co2AvoidedHistory,
         renewableHistory: sparklines.renewableHistory,
@@ -278,8 +371,10 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
         updateCaptiveMW,
         updateGeneratorMW,
         setTotalDemandMW: setDemandMW,
+        setTariffTier,
         runSimulationScenario,
         resetToBaseline,
+        applyOptimalSchedule,
       }}
     >
       {children}

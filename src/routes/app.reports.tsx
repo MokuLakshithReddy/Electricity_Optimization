@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { Download, FileText, Leaf, IndianRupee, Zap, CheckCircle, ShieldCheck } from "lucide-react";
+import { Download, FileText, Leaf, IndianRupee, Zap, CheckCircle, ShieldCheck, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
+import { queryLedgerReport, exportLedgerToCsv } from "@/lib/energyLedger";
 import {
   Bar,
   BarChart,
@@ -41,126 +42,41 @@ export function ReportsPage() {
   const [period, setPeriod] = useState<ReportPeriod>("Weekly");
   const energyState = useEnergyState();
 
-  // Dynamic Dataset per Period
-  const reportMetrics = useMemo(() => {
-    switch (period) {
-      case "Daily":
-        return {
-          title: "Daily Energy Performance Report",
-          consumed: "520",
-          consumedUnit: "MWh",
-          cost: "₹48.2 L",
-          emissions: "214",
-          emissionsUnit: "tCO₂",
-          savings: "₹6.4 L",
-          renewablePct: "48.2%",
-          reliability: "99.97%",
-          gridPct: "30.0%",
-          bessPct: "12.0%",
-          usageData: [
-            { t: "00:00", solar: 0, wind: 45, captive: 35, grid: 60 },
-            { t: "04:00", solar: 0, wind: 55, captive: 40, grid: 50 },
-            { t: "08:00", solar: 65, wind: 35, captive: 42, grid: 45 },
-            { t: "12:00", solar: 145, wind: 25, captive: 40, grid: 30 },
-            { t: "16:00", solar: 80, wind: 40, captive: 42, grid: 40 },
-            { t: "20:00", solar: 0, wind: 60, captive: 45, grid: 70 },
-          ],
-          costTrendData: [
-            { t: "00:00", cost: 3.8, savings: 0.4 },
-            { t: "04:00", cost: 3.2, savings: 0.5 },
-            { t: "08:00", cost: 4.6, savings: 0.7 },
-            { t: "12:00", cost: 5.1, savings: 1.1 },
-            { t: "16:00", cost: 4.8, savings: 0.9 },
-            { t: "20:00", cost: 6.2, savings: 1.4 },
-          ],
-          ledger: [
-            { period: "Shift A (06:00–14:00)", energy: "185", cost: "₹16.8 L", co2: "72", renewable: "52.4%", savings: "₹2.4 L" },
-            { period: "Shift B (14:00–22:00)", energy: "210", cost: "₹22.4 L", co2: "94", renewable: "42.1%", savings: "₹2.8 L" },
-            { period: "Shift C (22:00–06:00)", energy: "125", cost: "₹9.0 L", co2: "48", renewable: "48.6%", savings: "₹1.2 L" },
-          ],
-        };
-      case "Weekly":
-        return {
-          title: "Weekly Industrial Energy & ESG Audit",
-          consumed: "11,482",
-          consumedUnit: "MWh",
-          cost: "₹7.84 Cr",
-          emissions: "4,318",
-          emissionsUnit: "tCO₂",
-          savings: "₹1.24 Cr",
-          renewablePct: "38.4%",
-          reliability: "99.95%",
-          gridPct: "32.4%",
-          bessPct: "14.2%",
-          usageData: [
-            { t: "Mon", solar: 1400, wind: 900, captive: 2200, grid: 2600 },
-            { t: "Tue", solar: 1460, wind: 1020, captive: 2180, grid: 2560 },
-            { t: "Wed", solar: 1520, wind: 880, captive: 2250, grid: 2500 },
-            { t: "Thu", solar: 1380, wind: 950, captive: 2210, grid: 2640 },
-            { t: "Fri", solar: 1580, wind: 1100, captive: 2150, grid: 2480 },
-            { t: "Sat", solar: 1620, wind: 1150, captive: 1900, grid: 2100 },
-            { t: "Sun", solar: 1680, wind: 1200, captive: 1800, grid: 1950 },
-          ],
-          costTrendData: [
-            { t: "Mon", cost: 1.18, savings: 0.18 },
-            { t: "Tue", cost: 1.15, savings: 0.19 },
-            { t: "Wed", cost: 1.12, savings: 0.20 },
-            { t: "Thu", cost: 1.19, savings: 0.17 },
-            { t: "Fri", cost: 1.10, savings: 0.21 },
-            { t: "Sat", cost: 0.95, savings: 0.24 },
-            { t: "Sun", cost: 0.88, savings: 0.26 },
-          ],
-          ledger: [
-            { period: "Week 31 (28 Jul - 03 Aug)", energy: "11,200", cost: "₹7.60 Cr", co2: "4,280", renewable: "31.2%", savings: "₹1.12 Cr" },
-            { period: "Week 32 (04 Aug - 10 Aug)", energy: "11,380", cost: "₹7.69 Cr", co2: "4,322", renewable: "32.1%", savings: "₹1.16 Cr" },
-            { period: "Week 33 (11 Aug - 17 Aug)", energy: "11,560", cost: "₹7.78 Cr", co2: "4,364", renewable: "33.0%", savings: "₹1.20 Cr" },
-            { period: "Week 34 (18 Aug - 24 Aug)", energy: "11,740", cost: "₹7.87 Cr", co2: "4,406", renewable: "33.9%", savings: "₹1.24 Cr" },
-            { period: "Week 35 (25 Aug - 31 Aug)", energy: "11,920", cost: "₹7.96 Cr", co2: "4,448", renewable: "34.8%", savings: "₹1.28 Cr" },
-          ],
-        };
-      case "Monthly":
-        return {
-          title: "Monthly Enterprise Executive Energy Report",
-          consumed: "48,620",
-          consumedUnit: "MWh",
-          cost: "₹32.6 Cr",
-          emissions: "18,420",
-          emissionsUnit: "tCO₂",
-          savings: "₹4.82 Cr",
-          renewablePct: "42.6%",
-          reliability: "99.98%",
-          gridPct: "28.5%",
-          bessPct: "15.8%",
-          usageData: [
-            { t: "Jan", solar: 5800, wind: 3800, captive: 9200, grid: 11000 },
-            { t: "Feb", solar: 6100, wind: 4100, captive: 9000, grid: 10500 },
-            { t: "Mar", solar: 6900, wind: 3900, captive: 8800, grid: 10200 },
-            { t: "Apr", solar: 7400, wind: 3600, captive: 8900, grid: 9800 },
-            { t: "May", solar: 8100, wind: 3400, captive: 9100, grid: 9600 },
-            { t: "Jun", solar: 7800, wind: 4200, captive: 8700, grid: 9400 },
-            { t: "Jul", solar: 6200, wind: 5100, captive: 9300, grid: 9900 },
-            { t: "Aug", solar: 6500, wind: 4800, captive: 9200, grid: 9700 },
-          ],
-          costTrendData: [
-            { t: "Jan", cost: 4.5, savings: 0.55 },
-            { t: "Feb", cost: 4.3, savings: 0.60 },
-            { t: "Mar", cost: 4.1, savings: 0.64 },
-            { t: "Apr", cost: 3.9, savings: 0.68 },
-            { t: "May", cost: 3.8, savings: 0.72 },
-            { t: "Jun", cost: 3.7, savings: 0.76 },
-            { t: "Jul", cost: 3.9, savings: 0.71 },
-            { t: "Aug", cost: 3.8, savings: 0.75 },
-          ],
-          ledger: [
-            { period: "Jan 2026", energy: "49,200", cost: "₹34.1 Cr", co2: "19,200", renewable: "39.4%", savings: "₹4.10 Cr" },
-            { period: "Feb 2026", energy: "48,100", cost: "₹33.2 Cr", co2: "18,800", renewable: "40.8%", savings: "₹4.35 Cr" },
-            { period: "Mar 2026", energy: "49,800", cost: "₹33.8 Cr", co2: "18,600", renewable: "42.1%", savings: "₹4.60 Cr" },
-            { period: "Apr 2026", energy: "47,900", cost: "₹32.1 Cr", co2: "17,900", renewable: "43.5%", savings: "₹4.80 Cr" },
-            { period: "May 2026", energy: "50,200", cost: "₹33.5 Cr", co2: "18,200", renewable: "44.2%", savings: "₹5.10 Cr" },
-          ],
-        };
-    }
-  }, [period]);
+  // Query historical energy ledger dynamically based on selected period
+  const ledgerData = useMemo(() => queryLedgerReport(period), [period]);
+
+  const reportMetrics = useMemo(() => ({
+    title: ledgerData.title,
+    consumed: ledgerData.totalConsumedMWh,
+    consumedUnit: "MWh",
+    cost: ledgerData.totalCostFormatted,
+    emissions: ledgerData.totalEmissionsFormatted,
+    emissionsUnit: "tCO₂",
+    savings: ledgerData.totalSavingsFormatted,
+    renewablePct: ledgerData.avgRenewablePct,
+    reliability: ledgerData.avgReliability,
+    gridPct: ledgerData.gridSharePct,
+    bessPct: ledgerData.bessSharePct,
+    usageData: ledgerData.usageChartData,
+    costTrendData: ledgerData.costTrendData,
+    ledger: ledgerData.ledgerRows,
+  }), [ledgerData]);
+
+  // CSV Ledger Audit Export Action
+  const handleExportCSV = () => {
+    const csvContent = exportLedgerToCsv(72);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `IntelliGrid_Energy_Ledger_${period}_Audit.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Cryptographically signed interval energy ledger exported to CSV.");
+  };
+
+
 
   // PDF Export Action
   const handleExportPDF = () => {
@@ -287,6 +203,15 @@ export function ReportsPage() {
               );
             })}
           </div>
+
+          {/* EXPORT CSV LEDGER BUTTON */}
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-2 rounded-full bg-white border border-[#E6E1D7] px-4 py-2.5 text-xs sm:text-sm font-bold text-[#1B4D3E] hover:bg-[#FAF8F5] transition-all shadow-xs active:scale-95 cursor-pointer"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-[#1B4D3E]" />
+            <span>Export CSV Ledger</span>
+          </button>
 
           {/* EXPORT PDF BUTTON */}
           <button
@@ -496,6 +421,7 @@ export function ReportsPage() {
               <th className="pb-3">CO₂ Emissions</th>
               <th className="pb-3">Renewable %</th>
               <th className="pb-3">Verified Savings</th>
+              <th className="pb-3 text-right">Block Hash (SHA-256)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F3F0EA]">
@@ -507,6 +433,11 @@ export function ReportsPage() {
                 <td className="py-3.5 font-mono text-[#4B5563]">{row.co2} t</td>
                 <td className="py-3.5 font-mono font-bold text-emerald-700">{row.renewable}</td>
                 <td className="py-3.5 font-mono font-bold text-[#1B4D3E]">{row.savings}</td>
+                <td className="py-3.5 font-mono text-[11px] text-right text-[#6B7280]">
+                  <span className="bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6E1D7]">
+                    0x{row.hashShort}...
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

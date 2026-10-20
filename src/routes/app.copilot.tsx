@@ -18,6 +18,7 @@ import {
 import { useEnergyState } from "@/context/EnergyContext";
 import { ExplainableCard } from "@/components/ExplainableCard";
 import { smartRecommendations } from "@/lib/intel";
+import { analyzeCopilotQuery } from "@/lib/copilotEngine";
 
 export const Route = createFileRoute("/app/copilot")({
   head: () => ({
@@ -90,160 +91,53 @@ function CopilotPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinkingStep]);
 
-  // Generate intelligent response based on current live energy context
+  // Generate intelligent, mathematically verified response using Copilot Reasoning Engine
   const getAIResponse = (query: string): ChatMessage => {
-    const q = query.toLowerCase();
+    const analysis = analyzeCopilotQuery(query, {
+      demandMW: energyState.totalDemandMW,
+      solarMW: energyState.solarMW,
+      windMW: energyState.windMW,
+      batteryMW: energyState.batteryMW,
+      batterySOC: energyState.batterySOC,
+      gridMW: energyState.gridMW,
+      captiveMW: energyState.captiveMW,
+      generatorMW: energyState.generatorMW,
+      tariffTier: energyState.currentTariffTier || "Peak",
+      hourlySavings: energyState.hourlySavings,
+      activeConstraints: energyState.activeConstraints,
+    });
 
-    // What-If: Battery Failure
-    if (q.includes("battery") && (q.includes("fail") || q.includes("survive") || q.includes("down"))) {
-      runSimulationScenario("battery_failure");
-      return {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: `Battery BESS-1 is currently unavailable (0 MWh capacity).\n\nI have recalculated the plant dispatch model:\n\n• Solar PV output: ${energyState.solarMW} MW\n• Wind farm output: ${energyState.windMW} MW\n• Grid import step-up: ${energyState.gridMW + 80} MW\n• Diesel generator backup: 25 MW auto-started\n• Power reliability: 99.97% maintained across critical mills.\n\nRisk Assessment:\nLoss of battery arbitrage increases peak ToD exposure by ₹1.8 L/hour. Generator-1 is held in hot standby to absorb sudden load steps.`,
-        decision: {
-          grid: energyState.gridMW + 80,
-          solar: energyState.solarMW,
-          wind: energyState.windMW,
-          battery: 0,
-          generator: 25,
-        },
-        impact: {
-          costSaved: "+₹1.8 L/hr cost exposure",
-          co2Avoided: "+42 t/hr CO₂",
-          reliability: "99.97%",
-          confidence: 94,
-        },
-        actionLink: {
-          label: "View What-If Simulation details →",
-          scenarioId: "battery_failure",
-        },
-      };
+    if (analysis.executableAction?.actionType === "TRIGGER_SIMULATION") {
+      runSimulationScenario(analysis.executableAction.payload);
     }
 
-    // What-If: Solar Drop
-    if (q.includes("solar") && (q.includes("drop") || q.includes("cloud") || q.includes("30%") || q.includes("50%"))) {
-      runSimulationScenario("solar_drop");
-      return {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: `Simulated 50% solar PV drop (convective cloud cover over solar park).\n\nAutomated AI Response Plan:\n• Solar output drops from 145 MW → 50 MW.\n• BESS-1 discharges +27.5 MW additional stored energy (<20 ms response).\n• Grid import ramps +45 MW to cover thermal deficit.\n• No load shed required for rolling mills.`,
-        decision: {
-          grid: energyState.gridMW + 45,
-          solar: 50,
-          wind: energyState.windMW,
-          battery: energyState.batteryMW + 28,
-          generator: 0,
-        },
-        impact: {
-          costSaved: "₹82,000/hr tariff exposure",
-          co2Avoided: "18.4 t/hr CO₂",
-          reliability: "99.99%",
-          confidence: 96,
-        },
-        actionLink: {
-          label: "Open Scenario Optimizer →",
-          route: "/app/scenarios",
-        },
-      };
-    }
-
-    // Question: Why grid?
-    if (q.includes("grid") || q.includes("why did ai choose")) {
-      return {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: `Grid power was selected for the current 15-minute interval because:\n\n• Solar generation is currently tracking at ${energyState.solarMW} MW.\n• Wind generation (${energyState.windMW} MW) is insufficient to cover the ${energyState.totalDemandMW} MW plant demand.\n• Battery SOC (${energyState.batterySOC}%) is being preserved for the upcoming 18:00–21:00 evening peak ToD tariff window.\n• Grid import currently provides the lowest reliable marginal cost (₹8.10/kWh shoulder rate vs ₹18.40/kWh diesel generation).`,
-        decision: {
-          grid: energyState.gridMW,
-          solar: energyState.solarMW,
-          wind: energyState.windMW,
-          battery: energyState.batteryMW,
-          generator: energyState.generatorMW,
-        },
-        impact: {
-          costSaved: energyState.energyCostSavedFormatted,
-          co2Avoided: energyState.co2AvoidedFormatted,
-          reliability: `${energyState.reliability}%`,
-          confidence: 94,
-        },
-        actionLink: {
-          label: "View decision details →",
-          route: "/app/scenarios",
-        },
-      };
-    }
-
-    // Question: Why cost high?
-    if (q.includes("cost") || q.includes("high") || q.includes("bill")) {
-      return {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: `Plant energy cost rate is currently ₹11.80/kWh due to Time-of-Day (ToD) peak pricing.\n\nPrimary Drivers:\n1. Peak ToD Tariff Window — High grid rate step-up.\n2. Heavy Industrial Load — Rolling mill #2 running at 100% capacity (${energyState.totalDemandMW} MW total demand).\n3. Solar Yield — Contributing ${energyState.solarMW} MW (28% of total mix).\n\nAI Optimization Recommendation:\nDischarge BESS-1 to cap peak grid demand above 350 MW and save ₹41,200 during this interval.`,
-        decision: {
-          grid: energyState.gridMW,
-          solar: energyState.solarMW,
-          wind: energyState.windMW,
-          battery: energyState.batteryMW,
-          generator: energyState.generatorMW,
-        },
-        impact: {
-          costSaved: "₹41,200 potential saving",
-          co2Avoided: "18.4 t avoided",
-          reliability: "99.97%",
-          confidence: 95,
-        },
-        actionLink: {
-          label: "Optimize Energy Costs →",
-          route: "/app/scenarios",
-        },
-      };
-    }
-
-    // Question: Charge battery?
-    if (q.includes("battery") && (q.includes("charge") || q.includes("should"))) {
-      return {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: `Yes, charging the battery bank to 85% is strongly recommended.\n\nReasoning:\n• Solar surplus is available at ₹2.10/kWh.\n• Evening peak ToD grid rate will rise to ₹11.80/kWh.\n• Spread arbitrage yields ₹4.1 L daily net savings.\n• 15% SOC headroom is maintained for voltage stabilization.`,
-        decision: {
-          grid: energyState.gridMW,
-          solar: energyState.solarMW,
-          wind: energyState.windMW,
-          battery: 62,
-          generator: 0,
-        },
-        impact: {
-          costSaved: "₹4.1 L/day net saving",
-          co2Avoided: "34.2 t/day avoided",
-          reliability: "100.0%",
-          confidence: 97,
-        },
-        actionLink: {
-          label: "Execute Battery Charge →",
-          route: "/app/scenarios",
-        },
-      };
-    }
-
-    // Default fallback response
     return {
       id: Date.now().toString(),
       role: "assistant",
-      text: `I am continuously analyzing live telemetry across Tata Steel Jamshedpur.\n\nCurrent Operational Status:\n• Plant Demand: ${energyState.totalDemandMW} MW\n• Renewable Share: ${energyState.renewableUtilization}%\n• Power Reliability: ${energyState.reliability}%\n• Grid Import: ${energyState.gridMW} MW\n\nAsk me about cost drivers, battery dispatch, What-If outage simulations, or CO₂ reduction targets.`,
+      text: analysis.responseMarkdown,
       decision: {
-        grid: energyState.gridMW,
-        solar: energyState.solarMW,
-        wind: energyState.windMW,
-        battery: energyState.batteryMW,
-        generator: energyState.generatorMW,
+        grid: analysis.decisionSetpoints.gridMW,
+        solar: analysis.decisionSetpoints.solarMW,
+        wind: analysis.decisionSetpoints.windMW,
+        battery: analysis.decisionSetpoints.batteryMW,
+        generator: analysis.decisionSetpoints.generatorMW,
       },
       impact: {
-        costSaved: energyState.energyCostSavedFormatted,
-        co2Avoided: energyState.co2AvoidedFormatted,
-        reliability: `${energyState.reliability}%`,
-        confidence: 93,
+        costSaved: analysis.impact.costSavedFormatted,
+        co2Avoided: analysis.impact.co2AvoidedFormatted,
+        reliability: analysis.impact.reliabilityFormatted,
+        confidence: analysis.calibratedConfidence,
       },
+      actionLink: analysis.executableAction
+        ? {
+            label: analysis.executableAction.label,
+            scenarioId:
+              analysis.executableAction.actionType === "TRIGGER_SIMULATION"
+                ? analysis.executableAction.payload
+                : undefined,
+            route: "/app/scenarios",
+          }
+        : undefined,
     };
   };
 

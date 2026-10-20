@@ -23,12 +23,17 @@ import {
   ArrowRight,
   ShieldAlert,
   Zap,
+  Award,
+  BarChart3,
+  CheckCircle2,
+  FileCheck,
 } from "lucide-react";
 import { useEnergyState } from "@/context/EnergyContext";
 import {
   generateForecast,
   ForecastHorizonId,
   ForecastPoint,
+  MODEL_GOVERNANCE_CARD,
 } from "@/data/forecastData";
 
 export const Route = createFileRoute("/app/forecasts")({
@@ -62,6 +67,7 @@ function ForecastsPage() {
   const energyState = useEnergyState();
   const [horizon, setHorizon] = useState<ForecastHorizonId>("6h");
   const [rampModalOpen, setRampModalOpen] = useState(false);
+  const [validationModalOpen, setValidationModalOpen] = useState(false);
 
   // Generate dynamic forecast based on horizon & live central EnergyContext state
   const { points, summary } = useMemo(
@@ -114,12 +120,21 @@ function ForecastsPage() {
             Forecasting Engine
           </h1>
           <p className="text-xs sm:text-sm text-[#6B7280]">
-            Gradient-boosted industrial load model · MAPE 2.4% over trailing 30 days
+            Empirical ARX load model · Holdout Tested MAPE {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% over trailing 120h test set
           </p>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full bg-[#E8F5E9] px-3.5 py-1.5 text-xs font-bold text-[#1B4D3E] border border-emerald-200 w-fit">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Model v4.2 · Live Sync</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setValidationModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full bg-white px-3.5 py-1.5 text-xs font-bold text-[#1B4D3E] border border-[#E6E1D7] hover:bg-[#FAF8F5] transition-all cursor-pointer shadow-xs"
+          >
+            <FileCheck className="h-3.5 w-3.5 text-[#1B4D3E]" />
+            <span>Model Card & Evaluation</span>
+          </button>
+          <div className="inline-flex items-center gap-2 rounded-full bg-[#E8F5E9] px-3.5 py-1.5 text-xs font-bold text-[#1B4D3E] border border-emerald-200 w-fit">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Model v4.2 · Holdout Verified</span>
+          </div>
         </div>
       </div>
 
@@ -144,17 +159,26 @@ function ForecastsPage() {
           </div>
         </div>
 
-        {/* Card 2: FORECAST HORIZON */}
-        <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
-            Forecast Horizon
-          </span>
+        {/* Card 2: FORECAST HORIZON & TESTED ACCURACY */}
+        <div
+          onClick={() => setValidationModalOpen(true)}
+          className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between hover:border-sky-500/50 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
+              Horizon & Accuracy
+            </span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full group-hover:bg-sky-100 transition-colors">
+              Holdout Audit →
+            </span>
+          </div>
           <div className="my-2">
             <span className="font-display text-3xl font-extrabold text-[#0284C7]">
               {horizonsList.find((h) => h.id === horizon)?.label}
             </span>
-            <p className="text-xs text-[#6B7280] font-medium mt-1">
-              Model MAPE: 2.4%
+            <p className="text-xs text-[#6B7280] font-medium mt-1 flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+              <span>Tested MAPE: {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% (R² {MODEL_GOVERNANCE_CARD.holdoutEvaluation.r2})</span>
             </p>
           </div>
         </div>
@@ -523,6 +547,146 @@ function ForecastsPage() {
                 className="rounded-2xl bg-[#1B4D3E] px-5 py-2 text-xs font-bold text-white hover:bg-[#133E32] transition-all cursor-pointer shadow-md"
               >
                 Apply Mitigation Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Model Governance & Empirical Evaluation Modal */}
+      {validationModalOpen && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-[#F3F0EA] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <Award className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-lg font-bold text-[#1F2937]">
+                    Model Evaluation & Empirical Benchmark
+                  </h3>
+                  <p className="text-xs text-[#6B7280]">
+                    {MODEL_GOVERNANCE_CARD.modelId} ({MODEL_GOVERNANCE_CARD.modelVersion})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setValidationModalOpen(false)}
+                className="rounded-2xl p-2 text-[#6B7280] hover:bg-[#FAF8F5] transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Architecture & Training Window */}
+              <div className="rounded-2xl bg-[#FAF8F5] p-3.5 border border-[#E6E1D7] space-y-2">
+                <p className="font-bold text-[#1F2937]">Model Architecture</p>
+                <p className="text-[#4B5563] font-mono text-[11px]">
+                  {MODEL_GOVERNANCE_CARD.architecture}
+                </p>
+                <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
+                  <div className="rounded-xl bg-white p-2 border border-[#E6E1D7]">
+                    <span className="text-[#6B7280] block">Training Window</span>
+                    <span className="font-bold text-[#1F2937]">{MODEL_GOVERNANCE_CARD.chronologicalSplit.trainHours}h (70%)</span>
+                  </div>
+                  <div className="rounded-xl bg-white p-2 border border-[#E6E1D7]">
+                    <span className="text-[#6B7280] block">Validation Window</span>
+                    <span className="font-bold text-[#1F2937]">{MODEL_GOVERNANCE_CARD.chronologicalSplit.valHours}h (13.3%)</span>
+                  </div>
+                  <div className="rounded-xl bg-white p-2 border border-emerald-200 bg-emerald-50/50">
+                    <span className="text-emerald-800 font-semibold block">Holdout Test Set</span>
+                    <span className="font-bold text-emerald-950">{MODEL_GOVERNANCE_CARD.chronologicalSplit.holdoutTestHours}h (16.7%)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Holdout Test Evaluation vs Baselines */}
+              <div>
+                <p className="font-bold text-[#1F2937] mb-2 flex items-center justify-between">
+                  <span>Out-of-Sample Holdout Benchmark (120 Hours)</span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                    Chronological Unseen Data
+                  </span>
+                </p>
+                <div className="overflow-x-auto rounded-2xl border border-[#E6E1D7]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#FAF8F5] border-b border-[#E6E1D7] text-[#6B7280] font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3">Model / Baseline</th>
+                        <th className="py-2.5 px-2">MAPE (%)</th>
+                        <th className="py-2.5 px-2">RMSE (MW)</th>
+                        <th className="py-2.5 px-2">MAE (MW)</th>
+                        <th className="py-2.5 px-2">R² Score</th>
+                        <th className="py-2.5 px-2 text-right">vs Model</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F3F0EA]">
+                      <tr className="bg-emerald-50/60 font-bold text-emerald-950">
+                        <td className="py-2.5 px-3 flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>IntelliGrid ARX v4.2 (Trained)</span>
+                        </td>
+                        <td className="py-2.5 px-2 font-mono text-emerald-700">
+                          {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}%
+                        </td>
+                        <td className="py-2.5 px-2 font-mono">{MODEL_GOVERNANCE_CARD.holdoutEvaluation.rmse}</td>
+                        <td className="py-2.5 px-2 font-mono">{MODEL_GOVERNANCE_CARD.holdoutEvaluation.mae}</td>
+                        <td className="py-2.5 px-2 font-mono text-emerald-700">{MODEL_GOVERNANCE_CARD.holdoutEvaluation.r2}</td>
+                        <td className="py-2.5 px-2 text-right text-emerald-800">Reference</td>
+                      </tr>
+                      {MODEL_GOVERNANCE_CARD.baselines.map((b) => (
+                        <tr key={b.baselineName} className="text-[#4B5563]">
+                          <td className="py-2.5 px-3">
+                            <span className="font-medium text-[#1F2937] block">{b.baselineName}</span>
+                            <span className="text-[10px] text-[#6B7280]">{b.description}</span>
+                          </td>
+                          <td className="py-2.5 px-2 font-mono">{b.mape}%</td>
+                          <td className="py-2.5 px-2 font-mono">{b.rmse}</td>
+                          <td className="py-2.5 px-2 font-mono">{b.mae}</td>
+                          <td className="py-2.5 px-2 font-mono">{b.r2}</td>
+                          <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">
+                            -{b.relativeImprovementMape}% error
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Feature Importance */}
+              <div>
+                <p className="font-bold text-[#1F2937] mb-2">Feature Importance Breakdown</p>
+                <div className="space-y-1.5">
+                  {MODEL_GOVERNANCE_CARD.featureImportance.map((f) => (
+                    <div key={f.feature} className="space-y-0.5">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="font-medium text-[#1F2937]">{f.feature}</span>
+                        <span className="font-mono text-[#6B7280]">{f.weightPct}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-[#F3F0EA] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#1B4D3E] rounded-full"
+                          style={{ width: `${f.weightPct * 2.5}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-between items-center border-t border-[#F3F0EA]">
+              <span className="text-[11px] text-[#6B7280]">
+                Last evaluated on 120-hour holdout test set · ISO 50001 compliant
+              </span>
+              <button
+                onClick={() => setValidationModalOpen(false)}
+                className="rounded-2xl bg-[#1B4D3E] px-5 py-2 text-xs font-bold text-white hover:bg-[#133E32] transition-all cursor-pointer shadow-md"
+              >
+                Close Audit
               </button>
             </div>
           </div>

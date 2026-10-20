@@ -1,10 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Battery, Boxes, Factory, Fuel, Sun, Zap, TriangleAlert } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Battery, Boxes, Factory, Fuel, Sun, Zap, TriangleAlert, Activity, CheckCircle2, ShieldAlert } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { GlassCard, Metric, PageHeader, StatusPill } from "@/components/ui-kit";
 import { inr } from "@/lib/energy";
+import { runDigitalTwinSimulation, SimulatorInputs } from "@/lib/digitalTwinSimulator";
 
 export const Route = createFileRoute("/app/digital-twin")({
   head: () => ({
@@ -13,12 +26,12 @@ export const Route = createFileRoute("/app/digital-twin")({
       {
         name: "description",
         content:
-          "Simulate solar expansion, battery sizing, grid failure, fuel price shocks and production growth with ROI and carbon impact.",
+          "Physics-informed 24h chronological simulation of solar expansion, battery sizing, grid outage, fuel price shocks and production growth.",
       },
       { property: "og:title", content: "Digital Twin Simulator — IntelliGrid AI" },
       {
         property: "og:description",
-        content: "What-if scenario modelling for industrial energy investments.",
+        content: "What-if physical and financial scenario modelling for industrial energy investments.",
       },
     ],
   }),
@@ -42,54 +55,58 @@ function DigitalTwin() {
     production: 15,
   });
   const [gridFail, setGridFail] = useState(false);
+  const [showChronologicalSchedule, setShowChronologicalSchedule] = useState(true);
 
-  const result = useMemo(() => {
-    const solarSave = vals.solar * 4.1e5;
-    const batterySave = vals.battery * 1.9e5;
-    const fuelCost = vals.fuel * 2.6e5;
-    const prodCost = vals.production * 4.4e5;
-    const savings = Math.max(0, solarSave + batterySave - fuelCost - prodCost * 0.35);
-    const capex = vals.solar * 3.4e6 + vals.battery * 1.9e6 + 1;
-    const roi = capex > 1 ? capex / Math.max(savings, 1) : 0;
-    const carbon = vals.solar * 1.42 + vals.battery * 0.42 - vals.production * 3.1;
-    const availability = gridFail
-      ? Math.min(99.2, 88 + vals.battery / 26 + vals.solar / 60)
-      : Math.min(99.99, 97.8 + vals.battery / 240);
-    return { savings, roi, carbon, availability, capex };
+  // Run the 24-hour physical and financial dispatch simulation
+  const sim = useMemo(() => {
+    return runDigitalTwinSimulation({
+      additionalSolarMW: vals.solar,
+      additionalBatteryMWh: vals.battery,
+      fuelPriceChangePct: vals.fuel,
+      productionIncreasePct: vals.production,
+      gridOutage: gridFail,
+    });
   }, [vals, gridFail]);
 
-  const decision = {
-    demand: 500,
-    solar: 180,
-    wind: 60,
-    battery: 80,
-  };
-  const actions = [
-    { label: "Use Solar", detail: "Dispatch 180 MW PV first — lowest marginal cost", tone: "eco" as const },
-    { label: "Use Wind", detail: "Absorb 60 MW wind, zero curtailment", tone: "cyan" as const },
-    { label: "Charge Battery", detail: "Bank 40 MW surplus for the 18:00 peak", tone: "cyan" as const },
-    { label: "Avoid Diesel", detail: "Gensets held at standby — ₹18.4/kWh avoided", tone: "warn" as const },
-  ];
-
   const bars = [
-    { name: "Baseline", cost: 4.62, co2: 512 },
-    { name: "Simulated", cost: Math.max(2.4, 4.62 - result.savings / 3.2e7), co2: Math.max(180, 512 - result.carbon) },
+    {
+      name: "Baseline",
+      cost: Number((sim.baselineAnnualCostCr / 10).toFixed(2)),
+      co2: Number((sim.baselineCO2AnnualTonnes / 1000).toFixed(0)),
+    },
+    {
+      name: "Simulated",
+      cost: Number((sim.simulatedAnnualCostCr / 10).toFixed(2)),
+      co2: Number((sim.simulatedCO2AnnualTonnes / 1000).toFixed(0)),
+    },
   ];
 
   return (
-    <div>
+    <div className="space-y-6 pb-12">
       <PageHeader
         title="Digital Twin Simulator"
-        subtitle="Model capital and operating scenarios against the live plant twin"
-        right={<StatusPill status="Twin synced 12s ago" tone="eco" />}
+        subtitle="Physics-informed 24h chronological dispatch & financial investment simulation"
+        right={
+          <StatusPill
+            status={gridFail ? "Simulating Grid Outage (Islanded)" : "Physics Model Synced · 89% Round-Trip"}
+            tone={gridFail ? "warn" : "eco"}
+          />
+        }
       />
 
       <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
+        {/* Controls Card */}
         <GlassCard delay={0.05}>
-          <div className="flex items-center gap-2">
-            <Boxes className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold">Scenario inputs</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Boxes className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Scenario Parameters</h2>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono bg-muted/60 px-2 py-0.5 rounded-full">
+              24-Hour Time-Series
+            </span>
           </div>
+
           <div className="mt-5 space-y-6">
             {sliders.map((s) => (
               <div key={s.key}>
@@ -97,7 +114,7 @@ function DigitalTwin() {
                   <span className="flex items-center gap-2 text-muted-foreground">
                     <s.icon className="h-3.5 w-3.5" /> {s.label}
                   </span>
-                  <span className="font-mono text-foreground">
+                  <span className="font-mono text-foreground font-bold">
                     {vals[s.key]}
                     {s.unit}
                   </span>
@@ -113,122 +130,184 @@ function DigitalTwin() {
                 />
               </div>
             ))}
+
             <button
               onClick={() => setGridFail((v) => !v)}
-              className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors ${
+              className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors cursor-pointer ${
                 gridFail
-                  ? "border-destructive/40 bg-destructive/15 text-destructive"
-                  : "border-border/70 bg-muted/40 text-muted-foreground"
+                  ? "border-destructive/40 bg-destructive/15 text-destructive font-bold"
+                  : "border-border/70 bg-muted/40 text-muted-foreground hover:text-foreground"
               }`}
             >
               <span className="flex items-center gap-2">
-                <TriangleAlert className="h-4 w-4" /> Simulate grid failure
+                <TriangleAlert className="h-4 w-4" /> Simulate Grid Incomer Failure
               </span>
-              <span className="text-xs">{gridFail ? "ACTIVE" : "OFF"}</span>
+              <span className="text-xs px-2 py-0.5 rounded-md font-mono">{gridFail ? "ISLANDED" : "OFF"}</span>
             </button>
+
+            {/* Model Physical Assumptions Legend */}
+            <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-[11px] space-y-1.5 text-muted-foreground">
+              <p className="font-bold text-foreground flex items-center gap-1.5">
+                <Activity className="h-3.5 w-3.5 text-emerald-500" /> Physical Simulation Constraints:
+              </p>
+              <div className="grid grid-cols-2 gap-1 font-mono text-[10px]">
+                <span>• BESS Round-trip: 89.0%</span>
+                <span>• Max C-Rate: 0.5C</span>
+                <span>• Cell Degradation: ~{sim.batteryCycleDegradationPctPerYear}%/yr</span>
+                <span>• LCOS: ₹{sim.lcosPerKWh}/kWh</span>
+                <span>• Captive Min Load: 30 MW</span>
+                <span>• Peak ToD: ₹11.80/kWh</span>
+              </div>
+            </div>
           </div>
         </GlassCard>
 
+        {/* Results Metrics & Charts */}
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric label="Projected savings" value={inr(Math.round(result.savings))} unit="/yr" tone="eco" delay={0.06} />
-            <Metric label="Payback (ROI)" value={result.roi ? `${result.roi.toFixed(1)}` : "—"} unit="yrs" delay={0.09} />
-            <Metric label="Carbon reduction" value={`${result.carbon.toFixed(0)}`} unit="t/yr" tone="cyan" delay={0.12} />
             <Metric
-              label="Power availability"
-              value={result.availability.toFixed(2)}
+              label="Net Annual Savings"
+              value={`₹${sim.annualSavingsCr}`}
+              unit="Cr/yr"
+              tone="eco"
+              delay={0.06}
+            />
+            <Metric
+              label="Simple Payback (ROI)"
+              value={sim.simplePaybackYears > 0 ? `${sim.simplePaybackYears}` : "—"}
+              unit={`yrs (NPV ₹${sim.npvCr} Cr)`}
+              delay={0.09}
+            />
+            <Metric
+              label="CO₂ Avoided"
+              value={`${(sim.annualCO2AvoidedTonnes / 1000).toFixed(1)}k`}
+              unit="tCO₂/yr"
+              tone="cyan"
+              delay={0.12}
+            />
+            <Metric
+              label="Power Availability"
+              value={sim.powerAvailabilityPct.toFixed(2)}
               unit="%"
-              tone={result.availability > 99 ? "eco" : "warn"}
+              tone={sim.powerAvailabilityPct > 99.5 ? "eco" : "warn"}
               delay={0.15}
             />
           </div>
 
+          {/* Chronological 24-Hour Physical Dispatch Chart */}
           <GlassCard delay={0.18}>
-            <h2 className="text-sm font-semibold">Baseline vs simulated</h2>
-            <p className="text-xs text-muted-foreground">Blended ₹/kWh and annual ktCO₂</p>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={bars}>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} />
-                <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="cost" name="₹/kWh" fill="var(--chart-1)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="co2" name="ktCO₂" fill="var(--chart-3)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">
+                  Chronological 24-Hour Dispatch & BESS State-of-Charge
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Physical hourly dispatch accounting for solar diurnal cycle, ToD tariffs, and battery efficiency losses
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowChronologicalSchedule(!showChronologicalSchedule)}
+                  className="text-xs font-semibold px-3 py-1 rounded-lg border border-border bg-muted/40 hover:bg-muted cursor-pointer"
+                >
+                  {showChronologicalSchedule ? "Hide Dispatch" : "Show Dispatch"}
+                </button>
+              </div>
+            </div>
+
+            {showChronologicalSchedule && (
+              <div className="h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sim.hourlySchedule} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="solarArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.6} />
+                        <stop offset="100%" stopColor="#F59E0B" stopOpacity={0.05} />
+                      </linearGradient>
+                      <linearGradient id="windArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0284C7" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#0284C7" stopOpacity={0.05} />
+                      </linearGradient>
+                      <linearGradient id="gridArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6B7280" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#6B7280" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="timeLabel" stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                    <YAxis stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--popover)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 12,
+                        fontSize: 11,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="solarMW" name="Solar PV (MW)" stroke="#F59E0B" fill="url(#solarArea)" />
+                    <Area type="monotone" dataKey="windMW" name="Wind Farm (MW)" stroke="#0284C7" fill="url(#windArea)" />
+                    <Area type="monotone" dataKey="gridMW" name="Grid Import (MW)" stroke="#6B7280" fill="url(#gridArea)" />
+                    <Line type="monotone" dataKey="demandMW" name="Factory Demand (MW)" stroke="#EF4444" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="batterySOC" name="BESS SoC (%)" stroke="#10B981" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </GlassCard>
+
+          {/* Baseline vs Simulated Cost and Emissions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <GlassCard delay={0.2}>
+              <h2 className="text-sm font-semibold">Annualized Financial Comparison</h2>
+              <p className="text-xs text-muted-foreground">Baseline vs Simulated Operating Cost (₹ Crore/year)</p>
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                  <span className="text-muted-foreground">Baseline Energy Cost (unmanaged):</span>
+                  <span className="font-mono font-bold text-foreground">₹{sim.baselineAnnualCostCr} Cr</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                  <span className="text-muted-foreground">Simulated Optimized Energy Cost:</span>
+                  <span className="font-mono font-bold text-emerald-600">₹{sim.simulatedAnnualCostCr} Cr</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                  <span className="text-muted-foreground">Estimated Capital Expenditure (CAPEX):</span>
+                  <span className="font-mono font-bold text-foreground">₹{sim.capexCr} Cr</span>
+                </div>
+                <div className="flex justify-between items-center text-emerald-700 font-bold">
+                  <span>Net 15-Year NPV (@ 10% WACC):</span>
+                  <span className="font-mono text-sm">₹{sim.npvCr} Cr</span>
+                </div>
+              </div>
+            </GlassCard>
+
+            <GlassCard delay={0.22}>
+              <h2 className="text-sm font-semibold">Reliability & Emissions Balance</h2>
+              <p className="text-xs text-muted-foreground">Loss of load expectation and carbon footprint</p>
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                  <span className="text-muted-foreground">Power System Availability:</span>
+                  <span className={`font-mono font-bold ${sim.powerAvailabilityPct > 99.5 ? "text-emerald-600" : "text-amber-600"}`}>
+                    {sim.powerAvailabilityPct}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                  <span className="text-muted-foreground">Annual Unserved Energy Shortfall:</span>
+                  <span className="font-mono font-bold text-foreground">{sim.unservedEnergyMWhAnnual} MWh</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                  <span className="text-muted-foreground">BESS Annual Capacity Fade Rate:</span>
+                  <span className="font-mono font-bold text-foreground">~{sim.batteryCycleDegradationPctPerYear}% / year</span>
+                </div>
+                <div className="flex justify-between items-center text-cyan font-bold">
+                  <span>CO₂ Avoided Annually:</span>
+                  <span className="font-mono text-sm">{sim.annualCO2AvoidedTonnes.toLocaleString("en-IN")} tonnes</span>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
         </div>
       </div>
-
-      <GlassCard className="mt-4" delay={0.22}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-cyan" />
-            <h2 className="text-sm font-semibold">AI decision simulator</h2>
-          </div>
-          <StatusPill status="Reliability score 96.4" tone="eco" />
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-[320px_1fr]">
-          <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/30 p-4 text-sm">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Scenario</p>
-            {[
-              ["Demand", `${decision.demand} MW`],
-              ["Solar", `${decision.solar} MW`],
-              ["Wind", `${decision.wind} MW`],
-              ["Battery", `${decision.battery}%`],
-              ["Grid", "Available"],
-              ["Captive", "Available"],
-            ].map(([k, v]) => (
-              <div key={k} className="flex justify-between">
-                <span className="text-muted-foreground">{k}</span>
-                <span className="font-mono">{v}</span>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {actions.map((a, i) => (
-                <motion.div
-                  key={a.label}
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 + i * 0.06 }}
-                  className="rounded-xl border border-border/60 bg-muted/30 p-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">{a.label}</p>
-                    <StatusPill status="Recommended" tone={a.tone} />
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{a.detail}</p>
-                </motion.div>
-              ))}
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-eco/10 p-3">
-                <p className="text-xs text-muted-foreground">Money saved</p>
-                <p className="font-display text-xl font-semibold text-eco">{inr(1840000)}</p>
-              </div>
-              <div className="rounded-xl bg-cyan/10 p-3">
-                <p className="text-xs text-muted-foreground">CO₂ saved</p>
-                <p className="font-display text-xl font-semibold text-cyan">86.4 t</p>
-              </div>
-              <div className="rounded-xl bg-primary/10 p-3">
-                <p className="text-xs text-muted-foreground">Reliability score</p>
-                <p className="font-display text-xl font-semibold text-primary">96.4%</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </GlassCard>
     </div>
   );
 }
