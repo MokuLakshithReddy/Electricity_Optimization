@@ -43,11 +43,14 @@ export interface EnergyLedgerRecord {
   dieselMWh: number;
   baselineCostRupees: number;
   optimizedCostRupees: number;
+  simulatedSavingsRupees: number; // Signed simulated cost variance (baseCost - optCost); preserves negative off-peak investment
+  /** @deprecated Retained for backwards compatibility with legacy UI consumers. Reflects simulatedSavingsRupees. */
   verifiedSavingsRupees: number;
   co2EmissionsTonnes: number;
   baselineCO2Tonnes: number;
   co2AvoidedTonnes: number;
   renewablePct: number;
+  illustrativeReliabilityPct: number; // Illustrative N-1 contingency index based on simulated model headroom (not certified field SAIDI/SAIFI)
   reliabilityPct: number;
   previousBlockHash: string;
   blockHashSha256: string;
@@ -180,7 +183,8 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       Math.min(250, demandMWh - solarMWh * 0.75 - captiveMWh) * 11.8 * 1000 +
       Math.max(0, demandMWh - solarMWh * 0.75 - captiveMWh - 250) * 22.56 * 1000;
 
-    const savings = Math.max(0, baseCost - optCost);
+    // Financial ledger: preserve signed cost difference (can be negative during off-peak battery charging)
+    const savings = Math.round(baseCost - optCost);
 
     // Carbon ledger
     const optCO2 =
@@ -200,9 +204,9 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
     const co2Avoided = Math.max(0, baseCO2 - optCO2);
 
     const renewablePct = Number((((solarMWh + windMWh) / demandMWh) * 100).toFixed(1));
-    const reliabilityPct = dieselMWh > 20 ? 99.85 : 99.97;
+    const illustrativeReliabilityPct = dieselMWh > 20 ? 99.85 : 99.97;
 
-    const blockData = `${i}|${time.toISOString()}|${demandMWh}|${solarMWh}|${windMWh}|${bessDischargeMWh}|${bessChargeMWh}|${gridImportMWh}|${captiveMWh}|${dieselMWh}|${Math.round(optCost)}|${Math.round(savings)}|${prevHash}`;
+    const blockData = `${i}|${time.toISOString()}|${demandMWh}|${solarMWh}|${windMWh}|${bessDischargeMWh}|${bessChargeMWh}|${gridImportMWh}|${captiveMWh}|${dieselMWh}|${Math.round(optCost)}|${savings}|${prevHash}`;
     const blockHashSha256 = sha256(blockData);
     const thisBlockPrevHash = prevHash;
     prevHash = blockHashSha256;
@@ -221,12 +225,14 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       dieselMWh,
       baselineCostRupees: Math.round(baseCost),
       optimizedCostRupees: Math.round(optCost),
-      verifiedSavingsRupees: Math.round(savings),
+      simulatedSavingsRupees: savings,
+      verifiedSavingsRupees: savings,
       co2EmissionsTonnes: Number(optCO2.toFixed(1)),
       baselineCO2Tonnes: Number(baseCO2.toFixed(1)),
       co2AvoidedTonnes: Number(co2Avoided.toFixed(1)),
       renewablePct,
-      reliabilityPct,
+      illustrativeReliabilityPct,
+      reliabilityPct: illustrativeReliabilityPct,
       previousBlockHash: thisBlockPrevHash,
       blockHashSha256,
     });
@@ -469,6 +475,13 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
  */
 export function exportLedgerToCsv(recordsCount = 48): string {
   const records = HISTORICAL_ENERGY_LEDGER.slice(-recordsCount);
+  const notice = [
+    "# INTELLIGRID AI — AUDIT DEMONSTRATION RECORD",
+    "# NOTICE: All interval data, generator telemetry, and financial figures represent synthetic digital-twin benchmark simulations.",
+    "# Figures represent simulated cost variance against an unmanaged reference baseline, NOT utility revenue-grade verified measurements.",
+    "# ISO 50001 compliance requires hardware HSM signatures, durable storage, and on-site revenue meter calibration.",
+  ];
+
   const headers = [
     "Block_Index",
     "Timestamp_UTC",
@@ -482,8 +495,9 @@ export function exportLedgerToCsv(recordsCount = 48): string {
     "Diesel_MWh",
     "Baseline_Cost_INR",
     "Optimized_Cost_INR",
-    "Verified_Savings_INR",
+    "Simulated_Cost_Variance_INR",
     "CO2_Avoided_t",
+    "Illustrative_Reliability_Pct",
     "Block_Hash_SHA256",
   ];
 
@@ -500,10 +514,11 @@ export function exportLedgerToCsv(recordsCount = 48): string {
     r.dieselMWh,
     r.baselineCostRupees,
     r.optimizedCostRupees,
-    r.verifiedSavingsRupees,
+    r.simulatedSavingsRupees,
     r.co2AvoidedTonnes,
+    r.illustrativeReliabilityPct,
     r.blockHashSha256,
   ]);
 
-  return [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+  return [...notice, headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
 }

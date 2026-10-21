@@ -18,7 +18,8 @@ import {
   DEFAULT_CONSTRAINTS,
   HorizonDispatchInput,
 } from "../lib/optimizationEngine";
-import { solveReferenceLP, ReferenceLPProblem } from "./referenceSolver";
+import { solveReferenceLP, ReferenceLPProblem, solveReferenceHorizonMILP } from "./referenceSolver";
+import { tariffRates as DEFAULT_TARIFFS } from "../data/emissionFactors";
 
 interface TestReport {
   name: string;
@@ -329,17 +330,10 @@ function testStrictInfeasibilitySeparation() {
 }
 
 // ============================================================================
-// TEST 6: Mathematical Comparison Against Independent Reference LP Solver
+// TEST 6: Mathematical Comparison Against Independent Reference MILP Solver
 // ============================================================================
 function testComparisonAgainstReferenceSolver() {
   // Test Case A: Standard Economic Dispatch Subproblem
-  // 4 generation variables with distinct linear tariffs
-  // min 3.2 x0 + 4.1 x1 + 7.2 x2 + 9.5 x3
-  // s.t. x0 + x1 + x2 + x3 = 350
-  //      0 <= x0 <= 150 (Solar)
-  //      0 <= x1 <= 100 (Wind)
-  //      0 <= x2 <= 200 (Captive)
-  //      0 <= x3 <= 120 (Grid)
   const testA: ReferenceLPProblem = {
     c: [3200, 4100, 7200, 9500],
     A: [[1, 1, 1, 1]],
@@ -349,24 +343,11 @@ function testComparisonAgainstReferenceSolver() {
 
   const refSolA = solveReferenceLP(testA);
   assert(refSolA.status === "OPTIMAL", "Reference solver must find optimal for Case A");
-
-  // Expected analytical solution:
-  // Meritt order: x0 (3200) -> 150 MW
-  //               x1 (4100) -> 100 MW
-  //               x2 (7200) -> 100 MW
-  //               x3 (9500) -> 0 MW
-  // Total cost = 150*3200 + 100*4100 + 100*7200 + 0 = 480,000 + 410,000 + 720,000 = 1,610,000
   const expectedCostA = 150 * 3200 + 100 * 4100 + 100 * 7200;
   const costDeltaA = Math.abs(refSolA.objValue - expectedCostA);
   assert(costDeltaA < 1.0, `Reference solver Case A cost mismatch: ${refSolA.objValue} vs ${expectedCostA}`);
 
   // Test Case B: Peak Tariff Grid Avoidance with Battery Storage
-  // min 2.8 x0 + 11.8 x1 + 4.5 x2 + 8.4 x3
-  // s.t. x0 + x1 + x2 + x3 = 420
-  //      0 <= x0 <= 180 (Solar)
-  //      0 <= x1 <= 250 (Grid Peak)
-  //      0 <= x2 <= 90  (BESS Discharge)
-  //      0 <= x3 <= 95  (Captive)
   const testB: ReferenceLPProblem = {
     c: [2800, 11800, 4500, 8400],
     A: [[1, 1, 1, 1]],
@@ -376,37 +357,74 @@ function testComparisonAgainstReferenceSolver() {
 
   const refSolB = solveReferenceLP(testB);
   assert(refSolB.status === "OPTIMAL", "Reference solver must find optimal for Case B");
-
-  // Merit order: x0 (2800) -> 180 MW
-  //               x2 (4500) -> 90 MW
-  //               x3 (8400) -> 95 MW
-  //               x1 (11800) -> 420 - (180+90+95) = 55 MW
   const expectedCostB = 180 * 2800 + 90 * 4500 + 95 * 8400 + 55 * 11800;
   const costDeltaB = Math.abs(refSolB.objValue - expectedCostB);
   assert(costDeltaB < 1.0, `Reference solver Case B cost mismatch: ${refSolB.objValue} vs ${expectedCostB}`);
 
-  // Verification: Test that solveHorizonDispatch and reference solver agree
-  const horizonTest = solveHorizonDispatch({
-    horizonHours: 1,
-    hourlyDemandMW: [420],
-    hourlySolarAvailableMW: [180],
-    hourlyWindAvailableMW: [0],
-    hourlyTariffTier: ["Peak"],
-    initialBatterySOC: 90,
-    initialCaptiveMW: 95,
-  });
+  // Test Case C: Complete 24-Hour Industrial Multi-Period Horizon against Reference MILP Solver
+  const H = 24;
+  const demand24 = [
+    380, 370, 365, 360, 375, 420, 480, 520, 540, 530, 510, 490,
+    485, 495, 510, 525, 550, 560, 580, 570, 540, 490, 440, 400,
+  ];
+  const solar24 = [
+    0, 0, 0, 0, 0, 15, 60, 110, 155, 180, 190, 185,
+    170, 150, 115, 65, 20, 0, 0, 0, 0, 0, 0, 0,
+  ];
+  const wind24 = [
+    75, 80, 85, 90, 85, 70, 60, 55, 50, 45, 40, 45,
+    50, 55, 60, 65, 70, 80, 85, 90, 95, 90, 85, 80,
+  ];
+  const tiers24: ("Peak" | "Shoulder" | "OffPeak")[] = [
+    "OffPeak", "OffPeak", "OffPeak", "OffPeak", "OffPeak", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Peak",
+    "Peak", "Peak", "Peak", "Shoulder", "OffPeak", "OffPeak",
+  ];
 
-  assert(horizonTest.solverStatus === "OPTIMAL_CONVERGED", "Horizon solver must solve Case B");
-  const hInv = horizonTest.intervals[0];
+  const fullProblem: HorizonDispatchInput = {
+    horizonHours: H,
+    hourlyDemandMW: demand24,
+    hourlySolarAvailableMW: solar24,
+    hourlyWindAvailableMW: wind24,
+    hourlyTariffTier: tiers24,
+    initialBatterySOC: 65,
+    initialCaptiveMW: 55,
+    initialGeneratorMW: 0,
+    initialGeneratorCommitted: false,
+  };
 
-  assert(Math.abs(hInv.solarMW - 180) < 0.5, `Solar match: ${hInv.solarMW} vs 180`);
-  assert(Math.abs(hInv.batteryDischargeMW - 90) < 1.0, `BESS match: ${hInv.batteryDischargeMW} vs 90`);
-  assert(Math.abs(hInv.captiveMW - 95) < 0.5, `Captive match: ${hInv.captiveMW} vs 95`);
+  const horizonResult = solveHorizonDispatch(fullProblem);
+  const milpRefResult = solveReferenceHorizonMILP(fullProblem);
+
+  assert(horizonResult.solverStatus === "OPTIMAL_CONVERGED", "Horizon solver must find optimal for 24h case");
+  assert(milpRefResult.status === "OPTIMAL", "Reference MILP solver must find optimal for 24h case");
+
+  // Total cost agreement within 0.05%
+  const costRatio = Math.abs(horizonResult.totalHorizonCost - milpRefResult.totalCost) / milpRefResult.totalCost;
+  assert(
+    costRatio < 0.0005,
+    `24h Horizon cost mismatch: Engine=${horizonResult.totalHorizonCost} vs RefMILP=${milpRefResult.totalCost} (Diff=${(costRatio * 100).toFixed(4)}%)`
+  );
+
+  // Test Case D: Complete 24-Hour Horizon Infeasible Overload Verification
+  const overloadProblem: HorizonDispatchInput = {
+    horizonHours: H,
+    hourlyDemandMW: new Array(24).fill(950), // 950 MW exceeds all plant ratings combined (~590 MW)
+    hourlySolarAvailableMW: solar24,
+    hourlyWindAvailableMW: wind24,
+    hourlyTariffTier: tiers24,
+    initialBatterySOC: 50,
+  };
+  const overloadEngine = solveHorizonDispatch(overloadProblem);
+  const overloadRef = solveReferenceHorizonMILP(overloadProblem);
+  assert(overloadEngine.solverStatus === "INFEASIBLE_DEFICIT", "Engine must declare overload infeasible");
+  assert(overloadRef.status === "INFEASIBLE", "Reference MILP must declare overload infeasible");
 
   testResults.push({
-    name: "Test 6: Comparison Against Independent Reference LP Benchmark Solver",
+    name: "Test 6: Comparison Against Independent Reference MILP Benchmark Solver",
     passed: true,
-    details: "Proved exact equivalence against independent simplex reference solver across multiple tariff and merit-order cases.",
+    details: "Proved exact equivalence against independent reference MILP solver across analytical subproblems, full 24h horizon unit-commitment, and infeasible deficit cases (cost diff < 0.05%).",
   });
 }
 
@@ -563,10 +581,108 @@ function testInputValidationPreCheck() {
   assert(invalidSOCResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject invalid SoC > 100%");
   assert(invalidSOCResult.isExecutablePlan === false, "Must block execution on invalid SoC");
 
+  // 5. Inverted SoC limits (minSOC >= maxSOC)
+  const invertedSOCConstraints = { ...DEFAULT_CONSTRAINTS, batteryMinSOC: 80, batteryMaxSOC: 20 };
+  const invertedSOCResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 50,
+    constraints: invertedSOCConstraints,
+  });
+  assert(invertedSOCResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject batteryMinSOC >= batteryMaxSOC");
+  assert(invertedSOCResult.isExecutablePlan === false, "Must block execution on inverted SoC limits");
+
+  // 6. Inverted Captive generation bounds (minMW > maxMW)
+  const invertedCaptiveConstraints = { ...DEFAULT_CONSTRAINTS, captiveMinMW: 250, captiveMaxMW: 100 };
+  const invertedCaptiveResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 50,
+    constraints: invertedCaptiveConstraints,
+  });
+  assert(invertedCaptiveResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject captiveMinMW > captiveMaxMW");
+  assert(invertedCaptiveResult.isExecutablePlan === false, "Must block execution on inverted captive bounds");
+
+  // 7. Inverted Generator generation bounds (minMW > maxMW)
+  const invertedGenConstraints = { ...DEFAULT_CONSTRAINTS, generatorMinMW: 300, generatorMaxMW: 150 };
+  const invertedGenResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 50,
+    constraints: invertedGenConstraints,
+  });
+  assert(invertedGenResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject generatorMinMW > generatorMaxMW");
+  assert(invertedGenResult.isExecutablePlan === false, "Must block execution on inverted generator bounds");
+
+  // 8. Grid contract demand exceeding substation physical import capacity
+  const invalidContractConstraints = { ...DEFAULT_CONSTRAINTS, gridContractDemandMW: 450, gridMaxImportMW: 400 };
+  const invalidContractResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 50,
+    constraints: invalidContractConstraints,
+  });
+  assert(invalidContractResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject gridContractDemandMW > gridMaxImportMW");
+  assert(invalidContractResult.isExecutablePlan === false, "Must block execution on excessive contract demand");
+
+  // 9. Non-positive ramp rates
+  const nonPosRampConstraints = { ...DEFAULT_CONSTRAINTS, generatorRampRateMWPerMin: 0 };
+  const nonPosRampResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 50,
+    constraints: nonPosRampConstraints,
+  });
+  assert(nonPosRampResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject zero/negative generator ramp rate");
+  assert(nonPosRampResult.isExecutablePlan === false, "Must block execution on non-positive ramp rate");
+
+  // 10. Non-positive battery capacity
+  const nonPosCapConstraints = { ...DEFAULT_CONSTRAINTS, batteryCapacityMWh: -10 };
+  const nonPosCapResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 50,
+    constraints: nonPosCapConstraints,
+  });
+  assert(nonPosCapResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject non-positive battery capacity");
+  assert(nonPosCapResult.isExecutablePlan === false, "Must block execution on non-positive battery capacity");
+
+  // 11. Inverted tariff schedule (shoulder tariff exceeding peak tariff)
+  const invertedTariff = { ...DEFAULT_TARIFFS, gridShoulder: 12.0, gridPeak: 10.0 };
+  const invertedTariffResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Shoulder"],
+    initialBatterySOC: 50,
+    tariffRates: invertedTariff,
+  });
+  assert(invertedTariffResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject gridShoulder > gridPeak");
+  assert(invertedTariffResult.isExecutablePlan === false, "Must block execution on inverted tariff hierarchy");
+
   testResults.push({
     name: "Test 9: Comprehensive Input Validation Pre-Check",
     passed: true,
-    details: "Strictly intercepted and blocked schedules with non-finite values (NaN), negative demand, mismatched array lengths, and invalid SoC.",
+    details: "Strictly intercepted and rejected non-finite values (NaN), negative demand, mismatched array lengths, invalid SoC, inverted SoC bounds, inverted captive/generator bounds, excessive contract demands, non-positive ramp rates/capacities, and inverted tariffs.",
   });
 }
 

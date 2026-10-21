@@ -270,6 +270,7 @@ export function validateHorizonInputs(
     }
   }
 
+  // Initial state boundaries
   if (!Number.isFinite(input.initialBatterySOC) || input.initialBatterySOC < 0 || input.initialBatterySOC > 100) {
     errors.push(`Invalid initialBatterySOC: ${input.initialBatterySOC}%. Must be finite and in [0, 100].`);
   } else if (input.initialBatterySOC < c.batteryMinSOC - 0.05 || input.initialBatterySOC > c.batteryMaxSOC + 0.05) {
@@ -279,15 +280,131 @@ export function validateHorizonInputs(
   if (input.targetTerminalSOC !== undefined) {
     if (!Number.isFinite(input.targetTerminalSOC) || input.targetTerminalSOC < 0 || input.targetTerminalSOC > 100) {
       errors.push(`Invalid targetTerminalSOC: ${input.targetTerminalSOC}%. Must be finite and in [0, 100].`);
+    } else if (input.targetTerminalSOC < c.batteryMinSOC - 0.05 || input.targetTerminalSOC > c.batteryMaxSOC + 0.05) {
+      errors.push(`targetTerminalSOC (${input.targetTerminalSOC}%) violates allowable envelope [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`);
     }
   }
 
-  // Constraints sanity
-  if (c.batteryCapacityMWh <= 0 || !Number.isFinite(c.batteryCapacityMWh)) {
-    errors.push(`Invalid batteryCapacityMWh: ${c.batteryCapacityMWh}`);
+  if (input.initialCaptiveMW !== undefined) {
+    if (!Number.isFinite(input.initialCaptiveMW) || input.initialCaptiveMW < c.captiveMinMW - 0.05 || input.initialCaptiveMW > c.captiveMaxMW + 0.05) {
+      errors.push(`initialCaptiveMW (${input.initialCaptiveMW} MW) outside physical bounds [${c.captiveMinMW}, ${c.captiveMaxMW}] MW.`);
+    }
   }
-  if (c.batteryRoundTripEfficiency <= 0 || c.batteryRoundTripEfficiency > 1.0) {
-    errors.push(`Invalid batteryRoundTripEfficiency: ${c.batteryRoundTripEfficiency}`);
+
+  if (input.initialGeneratorMW !== undefined) {
+    if (!Number.isFinite(input.initialGeneratorMW) || input.initialGeneratorMW < 0) {
+      errors.push(`Invalid initialGeneratorMW: ${input.initialGeneratorMW} MW.`);
+    } else if (input.initialGeneratorCommitted && (input.initialGeneratorMW < c.generatorMinMW - 0.05 || input.initialGeneratorMW > c.generatorMaxMW + 0.05)) {
+      errors.push(`Committed initialGeneratorMW (${input.initialGeneratorMW} MW) outside operating envelope [${c.generatorMinMW}, ${c.generatorMaxMW}] MW.`);
+    } else if (!input.initialGeneratorCommitted && input.initialGeneratorMW > 0.05) {
+      errors.push(`Uncommitted initialGeneratorMW must be 0 MW, got ${input.initialGeneratorMW} MW.`);
+    }
+  }
+
+  // Comprehensive Asset Constraints & Operating Envelope Validation
+  if (!Number.isFinite(c.solarCapacityMW) || c.solarCapacityMW < 0) {
+    errors.push(`Invalid solarCapacityMW: ${c.solarCapacityMW}. Must be finite and >= 0.`);
+  }
+  if (!Number.isFinite(c.windCapacityMW) || c.windCapacityMW < 0) {
+    errors.push(`Invalid windCapacityMW: ${c.windCapacityMW}. Must be finite and >= 0.`);
+  }
+
+  // Battery Envelope & C-Rates
+  if (!Number.isFinite(c.batteryCapacityMWh) || c.batteryCapacityMWh <= 0) {
+    errors.push(`Invalid batteryCapacityMWh: ${c.batteryCapacityMWh}. Must be finite and > 0.`);
+  }
+  if (!Number.isFinite(c.batteryMaxChargeMW) || c.batteryMaxChargeMW <= 0) {
+    errors.push(`Invalid batteryMaxChargeMW: ${c.batteryMaxChargeMW}. Must be finite and > 0.`);
+  }
+  if (!Number.isFinite(c.batteryMaxDischargeMW) || c.batteryMaxDischargeMW <= 0) {
+    errors.push(`Invalid batteryMaxDischargeMW: ${c.batteryMaxDischargeMW}. Must be finite and > 0.`);
+  }
+  if (!Number.isFinite(c.batteryRoundTripEfficiency) || c.batteryRoundTripEfficiency <= 0 || c.batteryRoundTripEfficiency > 1.0) {
+    errors.push(`Invalid batteryRoundTripEfficiency: ${c.batteryRoundTripEfficiency}. Must be in (0, 1.0].`);
+  }
+  if (!Number.isFinite(c.batteryDegradationCostPerMWh) || c.batteryDegradationCostPerMWh < 0) {
+    errors.push(`Invalid batteryDegradationCostPerMWh: ${c.batteryDegradationCostPerMWh}. Must be >= 0.`);
+  }
+  if (!Number.isFinite(c.batteryMinSOC) || !Number.isFinite(c.batteryMaxSOC)) {
+    errors.push(`Non-finite battery SoC bounds: [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`);
+  } else if (c.batteryMinSOC >= c.batteryMaxSOC) {
+    errors.push(`Inverted battery SoC bounds: minSOC (${c.batteryMinSOC}%) >= maxSOC (${c.batteryMaxSOC}%).`);
+  } else if (c.batteryMaxSOC - c.batteryMinSOC < 5.0) {
+    errors.push(`Battery operating window too narrow: maxSOC - minSOC = ${c.batteryMaxSOC - c.batteryMinSOC}% (< 5% required for safe cycling).`);
+  } else if (c.batteryMinSOC < 0 || c.batteryMaxSOC > 100) {
+    errors.push(`Battery SoC bounds [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%] must lie within [0, 100]%.`);
+  }
+
+  // Captive Thermal Generation Envelope & Ramp
+  if (!Number.isFinite(c.captiveMinMW) || c.captiveMinMW < 0) {
+    errors.push(`Invalid captiveMinMW: ${c.captiveMinMW}. Must be >= 0.`);
+  }
+  if (!Number.isFinite(c.captiveMaxMW) || c.captiveMaxMW <= 0) {
+    errors.push(`Invalid captiveMaxMW: ${c.captiveMaxMW}. Must be > 0.`);
+  }
+  if (c.captiveMinMW > c.captiveMaxMW) {
+    errors.push(`Inverted captive generation bounds: captiveMinMW (${c.captiveMinMW} MW) > captiveMaxMW (${c.captiveMaxMW} MW).`);
+  }
+  if (!Number.isFinite(c.captiveRampRateMWPerMin) || c.captiveRampRateMWPerMin <= 0) {
+    errors.push(`Invalid captiveRampRateMWPerMin: ${c.captiveRampRateMWPerMin}. Must be > 0.`);
+  }
+
+  // Diesel Generator Envelope & Ramp
+  if (!Number.isFinite(c.generatorMinMW) || c.generatorMinMW < 0) {
+    errors.push(`Invalid generatorMinMW: ${c.generatorMinMW}. Must be >= 0.`);
+  }
+  if (!Number.isFinite(c.generatorMaxMW) || c.generatorMaxMW <= 0) {
+    errors.push(`Invalid generatorMaxMW: ${c.generatorMaxMW}. Must be > 0.`);
+  }
+  if (c.generatorMinMW > c.generatorMaxMW) {
+    errors.push(`Inverted generator bounds: generatorMinMW (${c.generatorMinMW} MW) > generatorMaxMW (${c.generatorMaxMW} MW).`);
+  }
+  if (!Number.isFinite(c.generatorRampRateMWPerMin) || c.generatorRampRateMWPerMin <= 0) {
+    errors.push(`Invalid generatorRampRateMWPerMin: ${c.generatorRampRateMWPerMin}. Must be > 0.`);
+  }
+  if (!Number.isFinite(c.generatorFuelCostPerLitre) || c.generatorFuelCostPerLitre <= 0) {
+    errors.push(`Invalid generatorFuelCostPerLitre: ${c.generatorFuelCostPerLitre}. Must be > 0.`);
+  }
+  if (!Number.isFinite(c.generatorSpecificFuelConsumption) || c.generatorSpecificFuelConsumption <= 0) {
+    errors.push(`Invalid generatorSpecificFuelConsumption: ${c.generatorSpecificFuelConsumption}. Must be > 0.`);
+  }
+  if (!Number.isFinite(c.generatorStartupCost) || c.generatorStartupCost < 0) {
+    errors.push(`Invalid generatorStartupCost: ${c.generatorStartupCost}. Must be >= 0.`);
+  }
+
+  // Grid Interconnection & Commercial Limits
+  if (!Number.isFinite(c.gridContractDemandMW) || c.gridContractDemandMW < 0) {
+    errors.push(`Invalid gridContractDemandMW: ${c.gridContractDemandMW}. Must be >= 0.`);
+  }
+  if (!Number.isFinite(c.gridMaxImportMW) || c.gridMaxImportMW <= 0) {
+    errors.push(`Invalid gridMaxImportMW: ${c.gridMaxImportMW}. Must be > 0.`);
+  }
+  if (c.gridContractDemandMW > c.gridMaxImportMW) {
+    errors.push(`Commercial contract demand (${c.gridContractDemandMW} MW) exceeds physical substation capacity (${c.gridMaxImportMW} MW).`);
+  }
+  if (!Number.isFinite(c.gridDemandChargePenaltyPerMW) || c.gridDemandChargePenaltyPerMW < 0) {
+    errors.push(`Invalid gridDemandChargePenaltyPerMW: ${c.gridDemandChargePenaltyPerMW}. Must be >= 0.`);
+  }
+
+  // Tariff Rates Sanity & Monotonicity
+  const tariffs = (input as any).tariffRates ?? tariffRates;
+  if (!Number.isFinite(tariffs.solar) || tariffs.solar < 0) {
+    errors.push(`Invalid solar tariff rate: ${tariffs.solar}`);
+  }
+  if (!Number.isFinite(tariffs.wind) || tariffs.wind < 0) {
+    errors.push(`Invalid wind tariff rate: ${tariffs.wind}`);
+  }
+  if (!Number.isFinite(tariffs.captive) || tariffs.captive < 0) {
+    errors.push(`Invalid captive tariff rate: ${tariffs.captive}`);
+  }
+  if (!Number.isFinite(tariffs.gridPeak) || tariffs.gridPeak <= 0) {
+    errors.push(`Invalid gridPeak tariff rate: ${tariffs.gridPeak}`);
+  }
+  if (!Number.isFinite(tariffs.gridShoulder) || tariffs.gridShoulder <= 0) {
+    errors.push(`Invalid gridShoulder tariff rate: ${tariffs.gridShoulder}`);
+  }
+  if (tariffs.gridShoulder > tariffs.gridPeak + 0.05) {
+    errors.push(`Inverted grid tariffs: shoulder rate (${tariffs.gridShoulder}) exceeds peak rate (${tariffs.gridPeak}).`);
   }
 
   return {
