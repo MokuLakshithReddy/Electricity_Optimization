@@ -100,6 +100,69 @@ export interface AggregatedReport {
 }
 
 import * as fs from "node:fs";
+import * as path from "node:path";
+
+/**
+ * Cross-Process Advisory File Lock:
+ * Coordinates write operations across independent operating-system processes.
+ * Creates an exclusive lockfile with atomic creation semantics (O_EXCL / 'wx')
+ * and includes automatic stale-lock timeout reclamation.
+ */
+function acquireInterProcessLock(lockFilePath: string, timeoutMs: number = 5000): () => void {
+  if (typeof fs === "undefined" || typeof fs.openSync !== "function") {
+    return () => {};
+  }
+  const startTime = Date.now();
+  while (true) {
+    try {
+      const fd = fs.openSync(lockFilePath, "wx");
+      try {
+        fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+      } finally {
+        fs.closeSync(fd);
+      }
+      return () => {
+        try {
+          if (fs.existsSync(lockFilePath)) {
+            fs.unlinkSync(lockFilePath);
+          }
+        } catch {
+          // Ignore unlock unlink errors
+        }
+      };
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "EEXIST") {
+        try {
+          const stats = fs.statSync(lockFilePath);
+          if (Date.now() - stats.mtimeMs > 5000) {
+            try {
+              fs.unlinkSync(lockFilePath);
+              continue;
+            } catch {
+              // Concurrently unlinked
+            }
+          }
+        } catch {
+          continue;
+        }
+
+        if (Date.now() - startTime > timeoutMs) {
+          throw new Error(
+            `Inter-Process Concurrency Lock Timeout: Could not acquire lock '${lockFilePath}' within ${timeoutMs}ms. Another process is actively writing to the durable ledger log.`,
+          );
+        }
+        // Micro-sleep backoff
+        const waitUntil = Date.now() + 15;
+        while (Date.now() < waitUntil) {
+          /* spin backoff */
+        }
+      } else {
+        throw err;
+      }
+    }
+  }
+}
 
 /**
  * Computes canonical block hash according to the mathematical formula:
@@ -862,18 +925,40 @@ export class DurablePersistentLedgerStore {
     if (this.backendType === "APPEND_ONLY_FILE_LOG") {
       try {
         if (typeof fs !== "undefined" && typeof fs.openSync === "function") {
-          const serializedRecord = JSON.stringify(record) + "\n";
-          // Open, append, physical fsync to disk platter/SSD, and close
-          const fd = fs.openSync(this.storageFilePath, "a");
+          const lockPath = `${this.storageFilePath}.lock`;
+          const releaseInterProcessLock = acquireInterProcessLock(lockPath);
           try {
-            fs.writeSync(fd, serializedRecord);
-            if (typeof fs.fsyncSync === "function") {
-              fs.fsyncSync(fd);
+            const serializedRecord = JSON.stringify(record) + "\n";
+            // Open, append, physical fsync to disk platter/SSD, and close
+            const fd = fs.openSync(this.storageFilePath, "a");
+            try {
+              fs.writeSync(fd, serializedRecord);
+              if (typeof fs.fsyncSync === "function") {
+                fs.fsyncSync(fd);
+              }
+            } finally {
+              fs.closeSync(fd);
             }
+
+            // Sync parent directory metadata if supported on platform
+            try {
+              const dirPath = path.dirname(this.storageFilePath);
+              const dirFd = fs.openSync(dirPath, "r");
+              try {
+                if (typeof fs.fsyncSync === "function") {
+                  fs.fsyncSync(dirFd);
+                }
+              } finally {
+                fs.closeSync(dirFd);
+              }
+            } catch {
+              // Directory fsync is platform-dependent
+            }
+
             isActuallyPersisted = true;
-            storageDetails = `Crash-safe fsync appended to durable file: ${this.storageFilePath}`;
+            storageDetails = `Crash-safe fsync appended with inter-process lock to durable file: ${this.storageFilePath}`;
           } finally {
-            fs.closeSync(fd);
+            releaseInterProcessLock();
           }
         } else {
           isActuallyPersisted = false;
@@ -1037,7 +1122,7 @@ export class DurablePersistentLedgerStore {
 
   /**
    * Production Backup: Creates an atomic, timestamped copy of the ledger audit log,
-   * flushes to physical disk, and computes an integrity SHA-256 checksum over the backup.
+   * flushes to physical disk with fsync, and commits atomically via temporary-file swap.
    */
   public async createBackup(customBackupPath?: string): Promise<{
     backupPath: string;
@@ -1058,12 +1143,30 @@ export class DurablePersistentLedgerStore {
     this.writeLock = currentLock;
     await previousLock;
 
+    const lockPath = `${this.storageFilePath}.lock`;
+    const releaseInterProcessLock = acquireInterProcessLock(lockPath);
+
     try {
+      const tmpBackupPath = `${backupPath}.tmp.${Date.now()}`;
       if (fs.existsSync(this.storageFilePath)) {
-        fs.copyFileSync(this.storageFilePath, backupPath);
+        fs.copyFileSync(this.storageFilePath, tmpBackupPath);
       } else {
-        fs.writeFileSync(backupPath, "", "utf-8");
+        fs.writeFileSync(tmpBackupPath, "", "utf-8");
       }
+
+      // Fsync temporary backup file
+      const fd = fs.openSync(tmpBackupPath, "r+");
+      try {
+        if (typeof fs.fsyncSync === "function") {
+          fs.fsyncSync(fd);
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+
+      // Atomic commit via rename
+      fs.renameSync(tmpBackupPath, backupPath);
+
       const content = fs.readFileSync(backupPath, "utf-8");
       const backupHashSha256 = sha256(content);
       return {
@@ -1072,13 +1175,14 @@ export class DurablePersistentLedgerStore {
         backupHashSha256,
       };
     } finally {
+      releaseInterProcessLock();
       releaseLock!();
     }
   }
 
   /**
    * Production Backup Restore: Verifies the backup file's complete cryptographic integrity
-   * from genesis to head before swapping it in as the active store.
+   * from genesis to head before swapping it in as the active store via atomic file swap.
    */
   public async restoreFromBackup(backupPath: string): Promise<{
     success: boolean;
@@ -1089,15 +1193,123 @@ export class DurablePersistentLedgerStore {
       throw new Error("File system not available for backup restore");
     }
 
-    // Verify backup integrity in temporary store
-    const tempStore = new DurablePersistentLedgerStore("APPEND_ONLY_FILE_LOG", backupPath);
-    const verifyRes = tempStore.restoreFromDurableStorage({ allowTailCrashRecovery: false });
-    if (!verifyRes.success) {
-      throw new Error("Cannot restore backup: Backup file failed cryptographic verification.");
+    // Acquire write lock
+    let releaseLock: () => void;
+    const currentLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const previousLock = this.writeLock;
+    this.writeLock = currentLock;
+    await previousLock;
+
+    const lockPath = `${this.storageFilePath}.lock`;
+    const releaseInterProcessLock = acquireInterProcessLock(lockPath);
+
+    try {
+      // Verify backup integrity in temporary store
+      const tempStore = new DurablePersistentLedgerStore("APPEND_ONLY_FILE_LOG", backupPath);
+      const verifyRes = tempStore.restoreFromDurableStorage({ allowTailCrashRecovery: false });
+      if (!verifyRes.success) {
+        throw new Error("Cannot restore backup: Backup file failed cryptographic verification.");
+      }
+
+      const tmpActivePath = `${this.storageFilePath}.tmp.${Date.now()}`;
+      fs.copyFileSync(backupPath, tmpActivePath);
+      const fd = fs.openSync(tmpActivePath, "r+");
+      try {
+        if (typeof fs.fsyncSync === "function") {
+          fs.fsyncSync(fd);
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+      fs.renameSync(tmpActivePath, this.storageFilePath);
+
+      return this.restoreFromDurableStorage({ allowTailCrashRecovery: false });
+    } finally {
+      releaseInterProcessLock();
+      releaseLock!();
+    }
+  }
+
+  /**
+   * Returns authoritative PostgreSQL DDL schema definition for production database deployment.
+   */
+  public static getPostgresMigrationDDL(): string {
+    return `
+-- INTELLIGRID AI DURABLE AUDIT LOG SCHEMA (PostgreSQL / Supabase)
+CREATE TABLE IF NOT EXISTS energy_ledger_audit (
+  block_index BIGINT PRIMARY KEY,
+  timestamp TIMESTAMPTZ NOT NULL,
+  previous_block_hash VARCHAR(64) NOT NULL,
+  block_hash_sha256 VARCHAR(64) NOT NULL UNIQUE,
+  solver_input_hash VARCHAR(64) NOT NULL,
+  dispatch_vector TEXT NOT NULL,
+  financial_baseline_cost NUMERIC(14, 2) NOT NULL,
+  optimized_cost NUMERIC(14, 2) NOT NULL,
+  verified_savings NUMERIC(14, 2) NOT NULL,
+  co2_abated_kg NUMERIC(14, 2) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_energy_ledger_timestamp ON energy_ledger_audit (timestamp);
+    `.trim();
+  }
+
+  /**
+   * Performs an active health check ping against the production database backend.
+   */
+  public async checkDatabaseHealth(): Promise<{
+    isConfigured: boolean;
+    isHealthy: boolean;
+    latencyMs?: number;
+    error?: string;
+  }> {
+    if (this.backendType !== "POSTGRES_SUPABASE") {
+      return { isConfigured: false, isHealthy: false, error: "Backend is not POSTGRES_SUPABASE" };
+    }
+    const supabaseUrl = typeof process !== "undefined" ? process.env?.["SUPABASE_URL"] : undefined;
+    const supabaseKey =
+      typeof process !== "undefined"
+        ? process.env?.["SUPABASE_SERVICE_ROLE_KEY"] ||
+          process.env?.["SUPABASE_ANON_KEY"] ||
+          process.env?.["SUPABASE_ACCESS_TOKEN"]
+        : undefined;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return {
+        isConfigured: false,
+        isHealthy: false,
+        error: "Missing SUPABASE_URL or API keys in environment",
+      };
     }
 
-    fs.copyFileSync(backupPath, this.storageFilePath);
-    return this.restoreFromDurableStorage({ allowTailCrashRecovery: false });
+    const tStart = Date.now();
+    try {
+      const resp = await fetch(
+        `${supabaseUrl}/rest/v1/energy_ledger_audit?select=block_index&limit=1`,
+        {
+          method: "GET",
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        },
+      );
+      const latencyMs = Date.now() - tStart;
+      if (!resp.ok) {
+        return {
+          isConfigured: true,
+          isHealthy: false,
+          latencyMs,
+          error: `HTTP ${resp.status} ${resp.statusText}`,
+        };
+      }
+      return { isConfigured: true, isHealthy: true, latencyMs };
+    } catch (err: unknown) {
+      const latencyMs = Date.now() - tStart;
+      const msg = err instanceof Error ? err.message : String(err);
+      return { isConfigured: true, isHealthy: false, latencyMs, error: msg };
+    }
   }
 
   public async fetchHistoricalBlocks(
@@ -1231,12 +1443,37 @@ export class CalibrationAuthorityRegistry {
     ],
   ]);
 
+  private static revokedCertificates: Map<string, { revokedAtISO: string; reason: string }> =
+    new Map();
+
   public static getCertificate(certNum: string): CalibrationCertificateRecord | undefined {
     return this.registry.get(certNum);
   }
 
   public static registerCertificate(record: CalibrationCertificateRecord): void {
     this.registry.set(record.certificateNumber, record);
+  }
+
+  public static revokeCertificate(certificateNumber: string, reason: string): void {
+    this.revokedCertificates.set(certificateNumber, {
+      revokedAtISO: new Date().toISOString(),
+      reason,
+    });
+  }
+
+  public static isCertificateRevoked(certificateNumber: string): {
+    isRevoked: boolean;
+    reason?: string;
+  } {
+    const rev = this.revokedCertificates.get(certificateNumber);
+    if (rev) {
+      return { isRevoked: true, reason: rev.reason };
+    }
+    return { isRevoked: false };
+  }
+
+  public static clearRevocations(): void {
+    this.revokedCertificates.clear();
   }
 }
 
@@ -1354,9 +1591,37 @@ export class RevenueMeterTelemetryIngestor {
     this.gatewaySequenceTracker.clear();
   }
 
+  public static persistSequenceTracker(storagePath: string): void {
+    if (typeof fs === "undefined" || typeof fs.writeFileSync !== "function") return;
+    const obj: Record<string, number> = {};
+    for (const [gw, seq] of this.gatewaySequenceTracker.entries()) {
+      obj[gw] = seq;
+    }
+    fs.writeFileSync(storagePath, JSON.stringify(obj, null, 2), "utf-8");
+  }
+
+  public static loadSequenceTracker(storagePath: string): void {
+    if (typeof fs === "undefined" || typeof fs.readFileSync !== "function") return;
+    if (!fs.existsSync(storagePath)) return;
+    try {
+      const data = JSON.parse(fs.readFileSync(storagePath, "utf-8")) as Record<string, number>;
+      for (const [gw, seq] of Object.entries(data)) {
+        if (typeof seq === "number") {
+          this.gatewaySequenceTracker.set(gw, seq);
+        }
+      }
+    } catch {
+      // Ignore corrupt tracker file
+    }
+  }
+
   public static validateAndIngest(
     packet: RevenueMeterPacket,
-    options?: { enforceSequenceIncrement?: boolean },
+    options?: {
+      enforceSequenceIncrement?: boolean;
+      referenceClockMs?: number;
+      maxAllowableDriftSeconds?: number;
+    },
   ): {
     isValid: boolean;
     errors: string[];
@@ -1426,6 +1691,16 @@ export class RevenueMeterTelemetryIngestor {
           `UNREGISTERED_CALIBRATION_CERTIFICATE: Certificate '${packet.calibrationCertificateNumber}' is not recorded in the NABL calibration authority registry.`,
         );
       } else {
+        // Validate revocation status (CRL)
+        const revocationStatus = CalibrationAuthorityRegistry.isCertificateRevoked(
+          packet.calibrationCertificateNumber,
+        );
+        if (revocationStatus.isRevoked) {
+          errors.push(
+            `REVOKED_CALIBRATION_CERTIFICATE: Certificate '${packet.calibrationCertificateNumber}' was revoked by accreditation authority. Reason: ${revocationStatus.reason || "Unspecified"}.`,
+          );
+        }
+
         if (certRecord.meterSerialNumber !== packet.meterSerialNumber) {
           errors.push(
             `CERTIFICATE_METER_MISMATCH: Certificate '${packet.calibrationCertificateNumber}' is assigned to '${certRecord.meterSerialNumber}', not '${packet.meterSerialNumber}'.`,
@@ -1462,7 +1737,7 @@ export class RevenueMeterTelemetryIngestor {
       }
     }
 
-    // 5. Validate timestamp: reject NaN, future timestamps, and stale telemetry (> 30 days)
+    // 5. Validate timestamp: reject NaN, future timestamps, and excessive clock drift
     const tsMs = Date.parse(packet.timestampISO);
     if (Number.isNaN(tsMs)) {
       errors.push(`Malformed timestamp: '${packet.timestampISO}' is not a valid ISO 8601 string`);
@@ -1473,6 +1748,15 @@ export class RevenueMeterTelemetryIngestor {
         errors.push(
           `Future telemetry timestamp rejected: ${packet.timestampISO} is ahead of reference clock by >5 minutes`,
         );
+      }
+      if (options?.referenceClockMs) {
+        const clockSkewSeconds = Math.abs(options.referenceClockMs - tsMs) / 1000;
+        const maxDrift = options.maxAllowableDriftSeconds ?? 300;
+        if (clockSkewSeconds > maxDrift) {
+          errors.push(
+            `CLOCK_DRIFT_EXCEEDED: Telemetry timestamp ${packet.timestampISO} deviates from reference clock by ${clockSkewSeconds.toFixed(1)}s (exceeds ${maxDrift}s limit).`,
+          );
+        }
       }
     }
 
@@ -1649,3 +1933,9 @@ export class RevenueMeterTelemetryIngestor {
     };
   }
 }
+
+export const ENERGY_LEDGER_REVENUE_GRADE_DISCLAIMER = {
+  regulatoryStatus: "DIGITAL_INTEGRITY_PREREQUISITE_NOT_PHYSICAL_CERTIFICATION" as const,
+  statement:
+    "Software-level CRC-16, gateway HMAC signatures, anti-replay monotonic counters, and NABL registry lookups provide cryptographic telemetry integrity. However, revenue-grade financial settlement and utility billing legally require physical on-site instrument calibration, secondary injection testing of PT/CT loops, physical lead seals, and accredited third-party field audits under CEA / CERC grid code standards.",
+};

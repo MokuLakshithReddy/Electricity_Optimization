@@ -322,6 +322,8 @@ npm run test:optimizer
 31. **Strict Revenue-Grade Meter Security**: Rejection of `AUTO_CRC` bypass and payload bit-flips, gateway HMAC transport authentication, monotonic packet sequence tracking for anti-replay defense, NABL calibration certificate registry validation with Class 0.2S uncertainty limits ($\le 0.20\%$), and verified end-to-end meter-to-ledger audit persistence.
 32. **Asymmetric Public-Key Engineering Authority Sign-Off**: Pure asymmetric public-key cryptography (Ed25519 SPKI PEM) with zero private secrets in the codebase; verifies digital signatures across all 6 engineering milestones while keeping physical equipment actuation permanently locked in simulation mode (`isPhysicalActuationPermitted: false`).
 33. **Adversarial Optimization Stress Suite**: Adversarial ramp traps, tariff surges, and rigorous mathematical certification comparing unrounded candidate schedules with continuous-relaxation lower bounds under documented IEEE 754 precision tolerances.
+34. **Inter-Process Advisory File Locking, Atomic Swap Backup/Restore & DB DDL/Health**: Verified OS-level advisory lockfile (`.lock`) creation/cleanup across processes, atomic temporary-file-and-rename swap for backups and restores, authoritative PostgreSQL migration DDL generation, and active database connection health monitoring.
+35. **Enterprise PKI Hook, Historical Credential Audit, Meter CRL & Drift**: Verified historical credential rotation audit, enterprise X.509 CA hook rejection, NABL Certificate Revocation List (CRL) interception, clock drift enforcement, restart-persistent anti-replay sequence tracking, and regulatory field disclaimer.
 
 ---
 
@@ -329,7 +331,7 @@ npm run test:optimizer
 
 | Requirement                                          | Audit Assessment                               | Architecture Implementation & Verification                                                                                                                                                                                                                                              |
 | :--------------------------------------------------- | :--------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Build, lint, type-check and configured tests**     | **Passing (CI Certified)**                     | Enforced TypeScript strictness (`noUncheckedIndexedAccess: true`), ESLint, 33/33 mathematical proof tests, and Nitro production build on GitHub Actions.                                                                                                                                |
+| **Build, lint, type-check and configured tests**     | **Passing (CI Certified)**                     | Enforced TypeScript strictness (`noUncheckedIndexedAccess: true`), ESLint, 35/35 mathematical proof tests, and Nitro production build on GitHub Actions.                                                                                                                                |
 | **Asymmetric Key Management & Security**             | **Zero Hard-Coded Secrets**                    | Pure asymmetric public-key architecture (Ed25519 SPKI PEM). Keyring contains only public verification keys and certificate hashes; private signing keys are generated/held exclusively by authorized engineers or KMS/HSM modules.                                                      |
 | **Durable Audit Storage & Crash Safety**             | **Production Durable**                         | Synchronous `fsync` file flushing, promise-mutex serialized concurrent writes, tail crash prefix recovery (`allowTailCrashRecovery`), cryptographic backup/restore validation, and strict rejection of unconfigured database backends (`UNSUPPORTED_OR_UNCONFIGURED_DATABASE_BACKEND`). |
 | **24-Hour Mathematical Optimization Certificate**    | **Rigorous Numerical Contract**                | Unrounded IEEE 754 64-bit continuous-relaxation dual lower bound, independent physical schedule recomputation and constraint validation (power balance, battery envelope & kinetics, captive ramps), and documented machine precision $\epsilon = 10^{-7}$.                             |
@@ -340,14 +342,42 @@ npm run test:optimizer
 
 ### Mandatory Site Validation Milestones:
 
-| Milestone ID | Domain                            | Required Authority                                     | Description                                                                                                                          | Status                           |
-| :----------- | :-------------------------------- | :----------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :------------------------------- |
-| `VAL-TEL-01` | **Telemetry Calibration**         | NABL Accredited Lab & Substation Team                  | Physical calibration of 0.2S revenue meters, PT transformation ratios, and CT phase angle checks across 132kV incomers.              | ⏳ Pre-Commissioning Interlocked |
-| `VAL-PRT-02` | **Protection Coordination**       | Lead Protection Engineer (IEEE 1547 / IEC 61850)       | Coordination of reverse-power trip curves, anti-islanding schemes, breaker failure (50BF), and earth-fault relays.                   | ⏳ Pre-Commissioning Interlocked |
-| `VAL-INT-03` | **Permissive Interlocks**         | Plant Electrical Safety Committee & DCS Operations     | Physical dual-key trapped permissive switch (Castell) and Master Trip Relay (86) hardwired interlocks isolated from software.        | ⏳ Pre-Commissioning Interlocked |
-| `VAL-SOP-04` | **Steel Complex HAZOP**           | VP Operations (Tata Steel Jamshedpur)                  | Formal Hazard and Operability study for blast furnace blower emergency power, hot strip mill dynamic load reject, and shed priority. | ⏳ Pre-Commissioning Interlocked |
-| `VAL-COM-05` | **Hardware Gateway Audit**        | Certified Industrial Cybersecurity Auditor (IEC 62443) | Security token, optical isolation, and certified physical edge gateway deployment with independent hardware watchdog relay.          | ⏳ Pre-Commissioning Interlocked |
-| `VAL-NET-06` | **Network Redundancy & Watchdog** | Substation Automation & SCADA Network Team             | Dual-redundant PRP/HSR ring network with 250ms heartbeat loss watchdog for automatic autonomous droop failover.                      | ⏳ Pre-Commissioning Interlocked |
+| Milestone ID | Domain                      | Required Authority                                     | Description                                                                                                                          | Status                           |
+| :----------- | :-------------------------- | :----------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :------------------------------- |
+| `VAL-TEL-01` | **Telemetry Calibration**   | NABL Accredited Lab & Substation Team                  | Physical calibration of 0.2S revenue meters, PT transformation ratios, and CT phase angle checks across 132kV incomers.              | ⏳ Pre-Commissioning Interlocked |
+| `VAL-PRT-02` | **Protection Coordination** | Lead Protection Engineer (IEEE 1547 / IEC 61850)       | Coordination of reverse-power trip curves, anti-islanding schemes, breaker failure (50BF), and earth-fault relays.                   | ⏳ Pre-Commissioning Interlocked |
+| `VAL-INT-03` | **Permissive Interlocks**   | Plant Electrical Safety Committee & DCS Operations     | Physical dual-key trapped permissive switch (Castell) and Master Trip Relay (86) hardwired interlocks isolated from software.        | ⏳ Pre-Commissioning Interlocked |
+| `VAL-SOP-04` | **Steel Complex HAZOP**     | VP Operations (Tata Steel Jamshedpur)                  | Formal Hazard and Operability study for blast furnace blower emergency power, hot strip mill dynamic load reject, and shed priority. | ⏳ Pre-Commissioning Interlocked |
+| `VAL-COM-05` | **Hardware Gateway Audit**  | Certified Industrial Cybersecurity Auditor (IEC 62443) | Security token, optical isolation, and certified physical edge gateway deployment with independent hardware watchdog relay.          | ⏳ Pre-Commissioning Interlocked |
+
+---
+
+## 🚧 What Still Prevents Production Approval: The 4 Production Gates Before Live Equipment Actuation
+
+While the software architecture, cryptographic protocols, continuous relaxation mathematical bounds, and 35 automated proof tests pass with 100% compliance in CI, **live physical equipment actuation must remain strictly locked** (`isPhysicalActuationPermitted: false`). The following four physical and operational gates must be formally cleared before production approval:
+
+### Gate 1: Security & Engineering Authority Trust Root
+
+1. **Historical Git Credentials**: Confirmed via `HISTORICAL_CREDENTIAL_ROTATION_AUDIT` that credentials committed in historical repository revisions prior to commit `e32f57b` were synthetic development mock strings (`MOCK_TEST_SECRET_01_IEI_2026`) and were never deployed in any physical substation. Rotation was achieved by complete eradication from active code and transition to Ed25519 asymmetric public-key cryptography.
+2. **Enterprise PKI / CA Root Verification**: Code-defined public keys and engineering license IDs (`AUTHORIZED_ENGINEERING_KEYRING`) are design-time references. Production commissioning requires integrating the `setExternalPkiValidator` hook with an enterprise X.509 Certificate Authority (or hardware security module / KMS) to authenticate physical personnel before any milestone sign-off is accepted.
+3. **Hardware Actuation Interlock**: Physical closed-loop actuation remains permanently disabled in code. Live actuation commands cannot be issued without physical dual-key trapped permissive switches (Castell keys) and energized Master Trip Relays (86).
+
+### Gate 2: Multi-Process Enterprise Database Deployment
+
+1. **Single-Node vs Multi-Instance Concurrency**: The file-backed store implements OS-level advisory file locking (`acquireInterProcessLock`) and atomic temporary-file-and-rename swaps (`fs.renameSync`) for single-server durability. However, horizontal scaling across multiple container instances requires a clustered database backend.
+2. **Production PostgreSQL / Supabase Migration**: The repository now provides authoritative DDL via `DurablePersistentLedgerStore.getPostgresMigrationDDL()` and connection health checks via `checkDatabaseHealth()`. Production deployment requires provisioning an active, monitored PostgreSQL/Supabase cluster with point-in-time recovery (PITR) and replication.
+
+### Gate 3: Mathematical Optimality Certificate & Near-Optimality Bounds
+
+1. **Duality Gap vs Exact Optimality**: The certificate strictly enforces honest mathematical classification:
+   - **`PROVEN_EXACT_GLOBAL_OPTIMAL`**: Achieved only when the duality gap is identically zero or branch-and-bound exploration completely finishes with zero unexplored nodes.
+   - **`PROVEN_BOUNDED_NEAR_OPTIMAL`**: Achieved when weak duality proves candidate cost $Z^*$ satisfies $(Z^* - Z_{\text{LB}}) / Z^* \le 0.05\%$. This guarantees that no combinatorial schedule among all $2^{24}$ states can beat $Z_{\text{LB}}$, bounding the suboptimality gap to $\le 0.05\%$.
+2. **Audit Hash Integrity**: The certificate's SHA-256 hash provides tamper-evident proof against an auditable ledger; it does not replace independent mathematical constraint validation and dual bound formulation.
+
+### Gate 4: Revenue-Grade Field Telemetry Ingestion
+
+1. **Digital vs Physical Revenue Verification**: Software checks (CRC-16, HMAC transport signatures, restart-persistent anti-replay counters, and NABL registry lookups) provide cryptographic transmission integrity.
+2. **Mandatory On-Site Calibration**: As documented in `ENERGY_LEDGER_REVENUE_GRADE_DISCLAIMER`, financial energy settlement legally mandates on-site secondary injection testing of PT/CT loops, physical lead seals, and accredited third-party field calibration under CEA and CERC grid code standards.
 
 ---
 

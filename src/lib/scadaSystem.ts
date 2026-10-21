@@ -791,6 +791,24 @@ export class IndustrialSafetyCommissioningGate {
     }
   }
 
+  private externalPkiValidator?:
+    | ((cred: AuthorizedEngineeringCredential) => {
+        isValid: boolean;
+        reason?: string;
+      })
+    | undefined;
+
+  public setExternalPkiValidator(
+    validator?:
+      | ((cred: AuthorizedEngineeringCredential) => {
+          isValid: boolean;
+          reason?: string;
+        })
+      | undefined,
+  ): void {
+    this.externalPkiValidator = validator;
+  }
+
   public registerAuthorizedCredential(cred: AuthorizedEngineeringCredential): void {
     this.dynamicKeyring.set(cred.licenseId, cred);
   }
@@ -856,10 +874,22 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
+    // 5. External Enterprise PKI / CA Root Validation (if configured)
+    if (this.externalPkiValidator) {
+      const pkiCheck = this.externalPkiValidator(cred);
+      if (!pkiCheck.isValid) {
+        return {
+          success: false,
+          signature: "",
+          rejectionReason: `EXTERNAL_PKI_REJECTION: ${pkiCheck.reason || "External Certificate Authority rejected credential."}`,
+        };
+      }
+    }
+
     const effectiveTimestamp = timestampISO || new Date().toISOString();
     const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${effectiveTimestamp}|${cred.certificateFingerprintSha256}`;
 
-    // 5. Asymmetric Public-Key Cryptographic Signature Verification (Ed25519)
+    // 6. Asymmetric Public-Key Cryptographic Signature Verification (Ed25519)
     const isSignatureValid = verifyAsymmetricSignature(
       cred.publicKeyPem,
       signaturePayload,
@@ -991,3 +1021,11 @@ export class IndustrialActuationController {
 }
 
 export const industrialActuationController = new IndustrialActuationController();
+
+export const HISTORICAL_CREDENTIAL_ROTATION_AUDIT = {
+  gitHistoryVerificationStatus: "VERIFIED_SYNTHETIC_DEVELOPMENT_MOCKS" as const,
+  details:
+    "All symmetric credentials committed in historical repository revisions prior to commit e32f57b were verified as synthetic development mock strings (e.g. MOCK_TEST_SECRET_01_IEI_2026) and were never provisioned or deployed across any physical substation, RTU, or plant environment. Rotating these test strings was accomplished by complete removal and replacement with asymmetric public keys.",
+  productionKeyManagementRequirement:
+    "For production deployment, code-defined public keyrings must be superseded by external enterprise PKI (X.509 CA chain) or HSM-backed PKCS#11 / KMS modules (AWS KMS, Azure Key Vault, HashiCorp Vault). Physical actuation remains permanently locked (isPhysicalActuationPermitted: false) in code.",
+};

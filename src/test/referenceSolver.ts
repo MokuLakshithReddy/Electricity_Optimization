@@ -711,6 +711,8 @@ export function solveContinuousRelaxationLowerBound(input: HorizonDispatchInput)
 
 export interface MathematicalOptimalityCertificate {
   isCertifiedGloballyOptimal: boolean;
+  optimalityClassification:
+    "PROVEN_EXACT_GLOBAL_OPTIMAL" | "PROVEN_BOUNDED_NEAR_OPTIMAL" | "UNPROVEN_SUBOPTIMAL";
   continuousRelaxationLowerBoundINR: number;
   candidateScheduleCostINR: number;
   dualityGapINR: number;
@@ -722,6 +724,7 @@ export interface MathematicalOptimalityCertificate {
   scheduleValidation:
     "INDEPENDENTLY_VALIDATED_PHYSICAL_SCHEDULE" | "CALLER_SUPPLIED_NUMERIC_SCALAR";
   certificateSummary: string;
+  auditDisclaimer: string;
   certificateHashSha256: string;
 }
 
@@ -876,23 +879,41 @@ export function certify24HourGlobalOptimality(
   const dualityGapPercent = (dualityGapINR / zCandidate) * 100;
   const maxPermissibleDualityGapPercent = 0.05;
 
+  let optimalityClassification:
+    "PROVEN_EXACT_GLOBAL_OPTIMAL" | "PROVEN_BOUNDED_NEAR_OPTIMAL" | "UNPROVEN_SUBOPTIMAL";
+
+  if (weakDualitySatisfied && dualityGapPercent === 0) {
+    optimalityClassification = "PROVEN_EXACT_GLOBAL_OPTIMAL";
+  } else if (weakDualitySatisfied && dualityGapPercent <= maxPermissibleDualityGapPercent) {
+    optimalityClassification = "PROVEN_BOUNDED_NEAR_OPTIMAL";
+  } else {
+    optimalityClassification = "UNPROVEN_SUBOPTIMAL";
+  }
+
   const isCertifiedGloballyOptimal =
-    weakDualitySatisfied && dualityGapPercent <= maxPermissibleDualityGapPercent;
+    optimalityClassification === "PROVEN_EXACT_GLOBAL_OPTIMAL" ||
+    optimalityClassification === "PROVEN_BOUNDED_NEAR_OPTIMAL";
 
   let certificateSummary: string;
-  if (isCertifiedGloballyOptimal) {
-    certificateSummary = `MATHEMATICAL GLOBAL OPTIMALITY CERTIFICATE: Continuous dual relaxation lower bound Z_LB (₹${zLB.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) <= Integer Candidate Z* (₹${zCandidate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) with duality gap ${dualityGapPercent.toFixed(4)}% (<= ${maxPermissibleDualityGapPercent}%). Weak duality proves no combinatorial schedule among all 2^24 states can beat Z_LB. Validation mode: ${validationMode}.`;
+  if (optimalityClassification === "PROVEN_EXACT_GLOBAL_OPTIMAL") {
+    certificateSummary = `EXACT GLOBAL OPTIMALITY CERTIFICATE: Candidate schedule cost Z* matches continuous relaxation lower bound Z_LB (duality gap = 0.0000%). Exact global optimality is mathematically certified across all 2^24 combinatorial states.`;
+  } else if (optimalityClassification === "PROVEN_BOUNDED_NEAR_OPTIMAL") {
+    certificateSummary = `BOUNDED NEAR-OPTIMALITY CERTIFICATE: Continuous dual relaxation lower bound Z_LB (₹${zLB.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) <= Integer Candidate Z* (₹${zCandidate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) with duality gap ${dualityGapPercent.toFixed(4)}% (<= ${maxPermissibleDualityGapPercent}%). Weak duality proves no combinatorial schedule among all 2^24 states can beat Z_LB. Validation mode: ${validationMode}. Status: PROVEN_BOUNDED_NEAR_OPTIMAL.`;
   } else if (!weakDualitySatisfied) {
     certificateSummary = `OPTIMALITY NOT CERTIFIED: Weak duality lower bound violated by numerical deviation > ${numericalToleranceINR} INR.`;
   } else {
     certificateSummary = `OPTIMALITY NOT CERTIFIED: Duality gap ${dualityGapPercent.toFixed(4)}% exceeds ${maxPermissibleDualityGapPercent}% threshold.`;
   }
 
-  const payload = `GLOBAL_OPT_CERT|${input.horizonHours}|${zLB.toFixed(4)}|${zCandidate.toFixed(4)}|${dualityGapPercent.toFixed(6)}|${isCertifiedGloballyOptimal}|${validationMode}`;
+  const auditDisclaimer =
+    "Mathematical lower bound Z_LB guarantees that any feasible schedule cannot have a cost strictly below Z_LB. When duality gap <= 0.05%, the schedule is proven near-optimal within that bounded gap. The SHA-256 certificate hash guarantees ledger tamper-evidence against an external auditable ledger but does not independently establish mathematical correctness without validating the continuous relaxation lower bound and constraint formulation.";
+
+  const payload = `GLOBAL_OPT_CERT|${input.horizonHours}|${zLB.toFixed(4)}|${zCandidate.toFixed(4)}|${dualityGapPercent.toFixed(6)}|${isCertifiedGloballyOptimal}|${optimalityClassification}|${validationMode}`;
   const certificateHashSha256 = sha256(payload);
 
   return {
     isCertifiedGloballyOptimal,
+    optimalityClassification,
     continuousRelaxationLowerBoundINR: zLB,
     candidateScheduleCostINR: zCandidate,
     dualityGapINR,
@@ -903,6 +924,7 @@ export function certify24HourGlobalOptimality(
     mathematicalProofMethod: "CONTINUOUS_RELAXATION_WEAK_DUALITY_LOWER_BOUND",
     scheduleValidation: validationMode,
     certificateSummary,
+    auditDisclaimer,
     certificateHashSha256,
   };
 }
