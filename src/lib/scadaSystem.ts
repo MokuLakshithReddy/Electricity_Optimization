@@ -12,6 +12,7 @@
  */
 
 import { sha256, hmacSha256 } from "./cryptoUtils";
+import * as nodeCrypto from "node:crypto";
 
 export interface SiteValidationMilestone {
   id: string;
@@ -648,25 +649,64 @@ export const scadaWatchdog = new ScadaWatchdogMonitor();
 // INDUSTRIAL COMMISSIONING SAFETY GATE & PHYSICAL ACTUATION CONTROLLER
 // ============================================================================
 
+/**
+ * Verifies an asymmetric digital signature (Ed25519) against an engineer's SPKI PEM public key.
+ */
+export function verifyAsymmetricSignature(
+  publicKeyPem: string,
+  data: string,
+  signatureHex: string,
+): boolean {
+  if (nodeCrypto && typeof nodeCrypto.verify === "function") {
+    try {
+      const pubKey = nodeCrypto.createPublicKey(publicKeyPem);
+      const dataBuf = Buffer.from(data, "utf-8");
+      const sigBuf = Buffer.from(signatureHex, "hex");
+      return nodeCrypto.verify(null, dataBuf, pubKey, sigBuf);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Signs payload using an engineer's PKCS#8 PEM private key (used by authorized signers / hardware tokens).
+ */
+export function signAsymmetricPayload(privateKeyPem: string, data: string): string {
+  if (nodeCrypto && typeof nodeCrypto.sign === "function") {
+    const privKey = nodeCrypto.createPrivateKey(privateKeyPem);
+    const dataBuf = Buffer.from(data, "utf-8");
+    return nodeCrypto.sign(null, dataBuf, privKey).toString("hex");
+  }
+  throw new Error("Private-key signing requires Node.js crypto environment");
+}
+
 export interface AuthorizedEngineeringCredential {
   licenseId: string;
   engineerName: string;
   certifyingAuthority: string;
   assignedMilestones: string[];
-  certificateSecret: string;
+  publicKeyPem: string; // Asymmetric Public Key (Ed25519 SPKI PEM) - No private secrets stored
   certificateFingerprintSha256: string;
   validUntilISO: string;
 }
 
+/**
+ * Public Engineering Authority Keyring:
+ * Contains ONLY public keys and certificate fingerprints. Zero private secrets are stored in this codebase.
+ * Signatures are verified using asymmetric public-key cryptography (Ed25519 / FIPS 186-5).
+ */
 export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineeringCredential> = {
   "IEI-PE-94821": {
     licenseId: "IEI-PE-94821",
     engineerName: "Er. Rajesh Sharma",
     certifyingAuthority: "NABL Accredited Calibration Laboratory & Substation Engineering",
     assignedMilestones: ["VAL-TEL-01"],
-    certificateSecret: "NABL_CAL_AUTH_KEY_77091_SIG",
+    publicKeyPem:
+      "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAg4+nyLjoyWMboynj15jqFeCUEELMGYJ2/BnU1Eh0f7M=\n-----END PUBLIC KEY-----",
     certificateFingerprintSha256:
-      "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+      "9364da0f81af3104947de43486c4146e97185ff321a57b074cbe2a149306b431",
     validUntilISO: "2028-12-31T23:59:59.000Z",
   },
   "CEA-PRT-3391": {
@@ -674,9 +714,10 @@ export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineerin
     engineerName: "Er. Sunita Mukherjee",
     certifyingAuthority: "Lead Protection Engineer & Grid Transmission Authority",
     assignedMilestones: ["VAL-PRT-02"],
-    certificateSecret: "CEA_GRID_RELAY_KEY_99214_SIG",
+    publicKeyPem:
+      "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA8qChBr2ge2FsIceEv66wCWwWalgPLRWfbbpwoyhVMqg=\n-----END PUBLIC KEY-----",
     certificateFingerprintSha256:
-      "b2c3d4e5f6a10718293a4b5c6d7e8f90123456789abcdef0123456789abcdef1",
+      "69b85bd72fa111f65f877940b8baddeffd7d18fcc1b2611b167624e4fa96d1ef",
     validUntilISO: "2028-12-31T23:59:59.000Z",
   },
   "PESC-INT-8820": {
@@ -684,9 +725,10 @@ export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineerin
     engineerName: "Er. Amitav Sengupta",
     certifyingAuthority: "Plant Electrical Safety Committee & DCS Operations",
     assignedMilestones: ["VAL-INT-03"],
-    certificateSecret: "PESC_CASTELL_INTERLOCK_KEY_33811_SIG",
+    publicKeyPem:
+      "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAQ/yR0L3f9Ml28SVFZymcYK/J0yrnn88ujnRUNHFngkw=\n-----END PUBLIC KEY-----",
     certificateFingerprintSha256:
-      "c3d4e5f6a1b20718293a4b5c6d7e8f90123456789abcdef0123456789abcdef2",
+      "b3774a104cd7c73e94cc8ea7b5c6518d7d7e87de3e776a48df5258f411db94bd",
     validUntilISO: "2028-12-31T23:59:59.000Z",
   },
   "TSL-SOP-4412": {
@@ -694,9 +736,10 @@ export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineerin
     engineerName: "Er. K. V. Ramanathan",
     certifyingAuthority: "VP Operations & Safety Directorate (Tata Steel Jamshedpur)",
     assignedMilestones: ["VAL-SOP-04"],
-    certificateSecret: "TSL_HAZOP_SAFETY_KEY_55219_SIG",
+    publicKeyPem:
+      "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAek7XvctDtqoVpKGMA3mXC/XCxAk6a8/gA511OHPqyGI=\n-----END PUBLIC KEY-----",
     certificateFingerprintSha256:
-      "d4e5f6a1b2c30718293a4b5c6d7e8f90123456789abcdef0123456789abcdef3",
+      "bcd3be32ae5fd74266785b32e108f332491c284d79b2b271610f3d5d3ba4fd74",
     validUntilISO: "2028-12-31T23:59:59.000Z",
   },
   "IEC-CYB-62443": {
@@ -704,9 +747,10 @@ export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineerin
     engineerName: "Er. Jennifer Wu",
     certifyingAuthority: "Certified Industrial Cybersecurity Auditor (IEC 62443)",
     assignedMilestones: ["VAL-COM-05"],
-    certificateSecret: "IEC62443_GATEWAY_HIL_KEY_88302_SIG",
+    publicKeyPem:
+      "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA6IyVzuf+dX6glpr2sR8fccmaJiNoUU5UltG493hFy68=\n-----END PUBLIC KEY-----",
     certificateFingerprintSha256:
-      "e5f6a1b2c3d40718293a4b5c6d7e8f90123456789abcdef0123456789abcdef4",
+      "e9fc06b7d94c32cade29a2f60fbcc9985a6b1ca4ed3013178bac1dac68f27fd8",
     validUntilISO: "2028-12-31T23:59:59.000Z",
   },
   "IEEE-NET-9910": {
@@ -714,9 +758,10 @@ export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineerin
     engineerName: "Er. Farhan Akhtar",
     certifyingAuthority: "Substation Automation & SCADA Network Engineering",
     assignedMilestones: ["VAL-NET-06"],
-    certificateSecret: "IEEE_PRP_NET_WATCHDOG_KEY_11492_SIG",
+    publicKeyPem:
+      "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA23uY0Is7eIVQZ5ZLjoGNVzoeasG5EzXAg8xndOlIQU4=\n-----END PUBLIC KEY-----",
     certificateFingerprintSha256:
-      "f6a1b2c3d4e50718293a4b5c6d7e8f90123456789abcdef0123456789abcdef5",
+      "14d651df24adcf821a4f62bb752f4e0321a35a64e1437c551a3ce58be3002245",
     validUntilISO: "2028-12-31T23:59:59.000Z",
   },
 };
@@ -735,11 +780,19 @@ export interface EngineeringSignoff {
 export class IndustrialSafetyCommissioningGate {
   private milestones: Map<string, SiteValidationMilestone> = new Map();
   private signoffs: Map<string, EngineeringSignoff> = new Map();
+  private dynamicKeyring: Map<string, AuthorizedEngineeringCredential> = new Map();
 
   constructor() {
     for (const m of SITE_SAFETY_VALIDATION.checklist) {
       this.milestones.set(m.id, { ...m });
     }
+    for (const [lic, cred] of Object.entries(AUTHORIZED_ENGINEERING_KEYRING)) {
+      this.dynamicKeyring.set(lic, cred);
+    }
+  }
+
+  public registerAuthorizedCredential(cred: AuthorizedEngineeringCredential): void {
+    this.dynamicKeyring.set(cred.licenseId, cred);
   }
 
   public recordEngineeringSignoff(
@@ -747,7 +800,8 @@ export class IndustrialSafetyCommissioningGate {
     engineerName: string,
     professionalLicenseId: string,
     certifyingAuthority: string,
-    certificateSecret: string,
+    digitalSignatureHex: string,
+    timestampISO?: string,
   ): { success: boolean; signature: string; rejectionReason?: string } {
     if (!this.milestones.has(milestoneId)) {
       return {
@@ -758,7 +812,7 @@ export class IndustrialSafetyCommissioningGate {
     }
 
     // 1. Look up engineer in Authorized Keyring
-    const cred = AUTHORIZED_ENGINEERING_KEYRING[professionalLicenseId];
+    const cred = this.dynamicKeyring.get(professionalLicenseId);
     if (!cred) {
       return {
         success: false,
@@ -802,32 +856,37 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
-    // 5. Cryptographic signature / secret verification
-    if (certificateSecret !== cred.certificateSecret) {
+    const effectiveTimestamp = timestampISO || new Date().toISOString();
+    const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${effectiveTimestamp}|${cred.certificateFingerprintSha256}`;
+
+    // 5. Asymmetric Public-Key Cryptographic Signature Verification (Ed25519)
+    const isSignatureValid = verifyAsymmetricSignature(
+      cred.publicKeyPem,
+      signaturePayload,
+      digitalSignatureHex,
+    );
+
+    if (!isSignatureValid) {
       return {
         success: false,
         signature: "",
-        rejectionReason: `CRYPTOGRAPHIC_FORGERY_DETECTED: Supplied signing key does not match authentic engineering certificate secret.`,
+        rejectionReason: `CRYPTOGRAPHIC_FORGERY_DETECTED: Supplied digital signature does not verify against the engineer's registered public key.`,
       };
     }
-
-    const timestampISO = new Date().toISOString();
-    const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${timestampISO}|${cred.certificateFingerprintSha256}`;
-    const digitalSignatureHmac = hmacSha256(signaturePayload, cred.certificateSecret);
 
     const signoff: EngineeringSignoff = {
       milestoneId,
       engineerName,
       professionalLicenseId,
       certifyingAuthority,
-      timestampISO,
-      digitalSignatureSha256: digitalSignatureHmac,
+      timestampISO: effectiveTimestamp,
+      digitalSignatureSha256: digitalSignatureHex,
       certificateFingerprint: cred.certificateFingerprintSha256,
       isSimulationApproval: true,
     };
 
     this.signoffs.set(milestoneId, signoff);
-    return { success: true, signature: digitalSignatureHmac };
+    return { success: true, signature: digitalSignatureHex };
   }
 
   public getSignedCount(): number {

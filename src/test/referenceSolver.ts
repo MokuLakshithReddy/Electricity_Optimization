@@ -702,9 +702,10 @@ export function solveContinuousRelaxationLowerBound(input: HorizonDispatchInput)
     return { status: "INFEASIBLE", lowerBoundCost: 0 };
   }
 
+  // Exact unrounded 64-bit IEEE 754 floating-point lower bound from continuous LP relaxation
   return {
     status: "OPTIMAL",
-    lowerBoundCost: Math.round(lpRes.trueTotalCost),
+    lowerBoundCost: lpRes.trueTotalCost,
   };
 }
 
@@ -716,9 +717,114 @@ export interface MathematicalOptimalityCertificate {
   dualityGapPercent: number;
   weakDualitySatisfied: boolean;
   maxPermissibleDualityGapPercent: number;
+  numericalToleranceINR: number;
   mathematicalProofMethod: "CONTINUOUS_RELAXATION_WEAK_DUALITY_LOWER_BOUND";
+  scheduleValidation:
+    "INDEPENDENTLY_VALIDATED_PHYSICAL_SCHEDULE" | "CALLER_SUPPLIED_NUMERIC_SCALAR";
   certificateSummary: string;
   certificateHashSha256: string;
+}
+
+/**
+ * Independently recomputes unrounded 24-hour total cost and validates physical feasibility
+ * directly from raw schedule intervals, without relying on caller-reported costs.
+ */
+export function validateAndRecomputeScheduleCost(
+  input: HorizonDispatchInput,
+  intervals: HorizonIntervalDispatch[],
+): { isValid: boolean; recomputedCostINR: number; validationErrors: string[] } {
+  const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
+  const H = input.horizonHours;
+  const errors: string[] = [];
+  const etaSqrt = Math.sqrt(c.batteryRoundTripEfficiency);
+
+  if (intervals.length !== H) {
+    errors.push(`Schedule length ${intervals.length} does not match horizon ${H}`);
+    return { isValid: false, recomputedCostINR: 0, validationErrors: errors };
+  }
+
+  let totalCost = 0;
+  let prevCaptive = input.initialCaptiveMW ?? c.captiveMinMW;
+  let prevGenCommitted = input.initialGeneratorCommitted ?? false;
+  let prevEnergyMWh = (input.initialBatterySOC / 100) * c.batteryCapacityMWh;
+  const maxCaptiveRamp = c.captiveRampRateMWPerMin * 60;
+
+  for (let t = 0; t < H; t++) {
+    const iv = intervals[t]!;
+    const tier = input.hourlyTariffTier[t] ?? "Shoulder";
+    let gridRate = tariffRates.gridShoulder;
+    if (tier === "Peak") gridRate = tariffRates.gridPeak;
+    else if (tier === "OffPeak") gridRate = tariffRates.gridOffPeak;
+
+    // 1. Physical Active Power Balance Check (tolerance 0.01 MW)
+    const demand = input.hourlyDemandMW[t] ?? 0;
+    const supplied =
+      iv.solarMW +
+      iv.windMW +
+      iv.captiveMW +
+      iv.gridMW +
+      iv.generatorMW +
+      iv.batteryDischargeMW -
+      iv.batteryChargeMW;
+
+    if (Math.abs(supplied - demand) > 0.05) {
+      errors.push(
+        `Hour ${t}: Power balance mismatch: supplied ${supplied.toFixed(2)} MW != demand ${demand.toFixed(2)} MW`,
+      );
+    }
+
+    // 2. Captive bounds and ramp check
+    if (iv.captiveMW < c.captiveMinMW - 0.01 || iv.captiveMW > c.captiveMaxMW + 0.01) {
+      errors.push(
+        `Hour ${t}: Captive MW ${iv.captiveMW} outside [${c.captiveMinMW}, ${c.captiveMaxMW}]`,
+      );
+    }
+    if (Math.abs(iv.captiveMW - prevCaptive) > maxCaptiveRamp + 0.01) {
+      errors.push(
+        `Hour ${t}: Captive ramp violation: change ${Math.abs(iv.captiveMW - prevCaptive).toFixed(2)} > ${maxCaptiveRamp}`,
+      );
+    }
+    prevCaptive = iv.captiveMW;
+
+    // 3. Battery kinetics & envelope check
+    const currentEnergyMWh =
+      prevEnergyMWh + iv.batteryChargeMW * etaSqrt - iv.batteryDischargeMW / etaSqrt;
+    const minEnergyMWh = (c.batteryMinSOC / 100) * c.batteryCapacityMWh;
+    const maxEnergyMWh = (c.batteryMaxSOC / 100) * c.batteryCapacityMWh;
+    if (currentEnergyMWh < minEnergyMWh - 0.05 || currentEnergyMWh > maxEnergyMWh + 0.05) {
+      errors.push(
+        `Hour ${t}: Battery energy ${currentEnergyMWh.toFixed(2)} MWh outside [${minEnergyMWh}, ${maxEnergyMWh}]`,
+      );
+    }
+    prevEnergyMWh = currentEnergyMWh;
+
+    // 4. Exact Unrounded Objective Formulation Accumulation
+    totalCost += iv.solarMW * tariffRates.solar * 1000;
+    totalCost += iv.windMW * tariffRates.wind * 1000;
+    totalCost += (iv.batteryDischargeMW / etaSqrt) * c.batteryDegradationCostPerMWh;
+    totalCost += iv.batteryChargeMW * etaSqrt * c.batteryDegradationCostPerMWh;
+
+    const gridContractLimit = c.gridContractDemandMW;
+    const contractImport = Math.min(iv.gridMW, gridContractLimit);
+    const excessImport = Math.max(0, iv.gridMW - gridContractLimit);
+    totalCost += contractImport * gridRate * 1000;
+    totalCost += excessImport * (gridRate * 1000 + c.gridDemandChargePenaltyPerMW);
+
+    totalCost += iv.captiveMW * tariffRates.captive * 1000;
+    totalCost +=
+      iv.generatorMW * (c.generatorFuelCostPerLitre / c.generatorSpecificFuelConsumption) * 1000;
+
+    if (iv.generatorCommitted && !prevGenCommitted) {
+      totalCost += c.generatorStartupCost;
+    }
+    prevGenCommitted = iv.generatorCommitted;
+  }
+
+  return {
+    isValid: errors.length === 0,
+    recomputedCostINR: totalCost,
+    validationErrors: errors,
+  };
 }
 
 /**
@@ -728,22 +834,43 @@ export interface MathematicalOptimalityCertificate {
  * Therefore Z_LB = min continuous relaxation is a certified universal lower bound
  * across ALL 2^24 combinatorial commitment states.
  *
- * When an integer schedule achieves cost Z* such that (Z* - Z_LB) / Z* <= 0.05%,
+ * When an independently validated schedule achieves cost Z* such that (Z* - Z_LB) / Z* <= 0.05%,
  * it is mathematically proven to be within 0.05% of the absolute global minimum.
  */
 export function certify24HourGlobalOptimality(
   input: HorizonDispatchInput,
-  candidateScheduleCostINR: number,
+  candidate:
+    | number
+    | { intervals: HorizonIntervalDispatch[]; totalHorizonCost?: number }
+    | HorizonIntervalDispatch[],
 ): MathematicalOptimalityCertificate {
   const lbResult = solveContinuousRelaxationLowerBound(input);
   if (lbResult.status !== "OPTIMAL") {
     throw new Error("Cannot certify optimality: Continuous LP relaxation is infeasible.");
   }
 
-  const zLB = lbResult.lowerBoundCost;
-  const zCandidate = candidateScheduleCostINR;
-  // Numerical tolerance for floating-point LP rounding across multi-million rupee objectives
-  const numericalToleranceINR = Math.max(10.0, 0.0001 * zCandidate);
+  const zLB = lbResult.lowerBoundCost; // Unrounded float
+  let zCandidate: number;
+  let validationMode:
+    "INDEPENDENTLY_VALIDATED_PHYSICAL_SCHEDULE" | "CALLER_SUPPLIED_NUMERIC_SCALAR";
+
+  if (typeof candidate === "number") {
+    zCandidate = candidate;
+    validationMode = "CALLER_SUPPLIED_NUMERIC_SCALAR";
+  } else {
+    const rawIntervals = Array.isArray(candidate) ? candidate : candidate.intervals;
+    const recompute = validateAndRecomputeScheduleCost(input, rawIntervals);
+    if (!recompute.isValid) {
+      throw new Error(
+        `Cannot certify optimality: Candidate schedule failed physical validation: ${recompute.validationErrors.join("; ")}`,
+      );
+    }
+    zCandidate = recompute.recomputedCostINR; // Independently recomputed unrounded cost
+    validationMode = "INDEPENDENTLY_VALIDATED_PHYSICAL_SCHEDULE";
+  }
+
+  // Documented numerical tolerance: IEEE 754 floating-point simplex machine precision (1e-6 relative, 0.01 INR absolute)
+  const numericalToleranceINR = Math.max(0.01, 1e-6 * zCandidate);
   const weakDualitySatisfied = zLB <= zCandidate + numericalToleranceINR;
   const dualityGapINR = Math.max(0, zCandidate - zLB);
   const dualityGapPercent = (dualityGapINR / zCandidate) * 100;
@@ -754,14 +881,14 @@ export function certify24HourGlobalOptimality(
 
   let certificateSummary: string;
   if (isCertifiedGloballyOptimal) {
-    certificateSummary = `MATHEMATICAL GLOBAL OPTIMALITY CERTIFICATE: Continuous dual relaxation lower bound Z_LB (₹${zLB.toLocaleString("en-IN")}) <= Integer Candidate Z* (₹${zCandidate.toLocaleString("en-IN")}) with duality gap ${dualityGapPercent.toFixed(4)}% (<= ${maxPermissibleDualityGapPercent}%). Weak duality proves no combinatorial schedule among all 2^24 states can beat Z_LB.`;
+    certificateSummary = `MATHEMATICAL GLOBAL OPTIMALITY CERTIFICATE: Continuous dual relaxation lower bound Z_LB (₹${zLB.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) <= Integer Candidate Z* (₹${zCandidate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) with duality gap ${dualityGapPercent.toFixed(4)}% (<= ${maxPermissibleDualityGapPercent}%). Weak duality proves no combinatorial schedule among all 2^24 states can beat Z_LB. Validation mode: ${validationMode}.`;
   } else if (!weakDualitySatisfied) {
     certificateSummary = `OPTIMALITY NOT CERTIFIED: Weak duality lower bound violated by numerical deviation > ${numericalToleranceINR} INR.`;
   } else {
     certificateSummary = `OPTIMALITY NOT CERTIFIED: Duality gap ${dualityGapPercent.toFixed(4)}% exceeds ${maxPermissibleDualityGapPercent}% threshold.`;
   }
 
-  const payload = `GLOBAL_OPT_CERT|${input.horizonHours}|${zLB}|${zCandidate}|${dualityGapPercent.toFixed(6)}|${isCertifiedGloballyOptimal}`;
+  const payload = `GLOBAL_OPT_CERT|${input.horizonHours}|${zLB.toFixed(4)}|${zCandidate.toFixed(4)}|${dualityGapPercent.toFixed(6)}|${isCertifiedGloballyOptimal}|${validationMode}`;
   const certificateHashSha256 = sha256(payload);
 
   return {
@@ -772,7 +899,9 @@ export function certify24HourGlobalOptimality(
     dualityGapPercent,
     weakDualitySatisfied,
     maxPermissibleDualityGapPercent,
+    numericalToleranceINR,
     mathematicalProofMethod: "CONTINUOUS_RELAXATION_WEAK_DUALITY_LOWER_BOUND",
+    scheduleValidation: validationMode,
     certificateSummary,
     certificateHashSha256,
   };
