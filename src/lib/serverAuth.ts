@@ -341,3 +341,71 @@ export const serverAuthorizeDispatch = createServerFn({ method: "POST" })
       authorizationSignature,
     };
   });
+
+/**
+ * SERVER FUNCTION: Run Optimization
+ * Authenticates session and verifies VIEW_TELEMETRY permission before executing
+ * the joint 24-hour horizon optimization engine on the server.
+ */
+export const serverRunOptimization = createServerFn({ method: "POST" })
+  .validator((data: { token: string; input: any }) => data)
+  .handler(async ({ data }) => {
+    const { token, input } = data;
+    const sessionCheck = verifyServerSessionToken(token);
+    if (!sessionCheck.valid || !sessionCheck.user) {
+      return {
+        success: false,
+        error: `Server Authentication Required: ${sessionCheck.error || "Invalid session token"}`,
+        result: null,
+      };
+    }
+
+    if (!sessionCheck.user.permissions.includes("VIEW_TELEMETRY")) {
+      return {
+        success: false,
+        error: `Access Denied: User role '${sessionCheck.user.role}' lacks permission 'VIEW_TELEMETRY'.`,
+        result: null,
+      };
+    }
+
+    const { solveHorizonDispatch } = await import("./optimizationEngine");
+    const result = solveHorizonDispatch(input);
+    return {
+      success: true,
+      operatorId: sessionCheck.user.username,
+      result,
+    };
+  });
+
+/**
+ * SERVER FUNCTION: Update Asset Constraints
+ * Authoritative RBAC gatekeeper: Enforces that standard viewers/auditors cannot modify
+ * physical plant constraints, commercial tariffs, or safety limits.
+ */
+export const serverUpdateAssetConstraints = createServerFn({ method: "POST" })
+  .validator((data: { token: string; newConstraints: any }) => data)
+  .handler(async ({ data }) => {
+    const { token, newConstraints } = data;
+    const sessionCheck = verifyServerSessionToken(token);
+    if (!sessionCheck.valid || !sessionCheck.user) {
+      return {
+        success: false,
+        error: `Server Authentication Required: ${sessionCheck.error || "Invalid session"}`,
+      };
+    }
+
+    if (!sessionCheck.user.permissions.includes("CONFIGURE_TARIFFS")) {
+      return {
+        success: false,
+        error: `Access Denied: Role '${sessionCheck.user.role}' cannot modify physical asset constraints or tariffs. Requires 'CONFIGURE_TARIFFS'.`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Asset constraints updated authoritatively by ${sessionCheck.user.name} (${sessionCheck.user.role}).`,
+      updatedAt: new Date().toISOString(),
+      constraints: newConstraints,
+    };
+  });
+

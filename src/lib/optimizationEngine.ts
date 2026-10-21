@@ -418,7 +418,7 @@ export function validateHorizonInputs(
 // ============================================================================
 
 export interface GeneralLPSolution {
-  status: "OPTIMAL" | "INFEASIBLE" | "UNBOUNDED";
+  status: "OPTIMAL" | "INFEASIBLE" | "UNBOUNDED" | "TIMEOUT";
   x: number[];
   objValue: number;
   iterations: number;
@@ -431,7 +431,8 @@ export interface GeneralLPSolution {
  *        A_ineq x <= b_ineq
  *        lb_j <= x_j <= ub_j
  * 
- * Uses full Two-Phase Simplex with artificial variable elimination.
+ * Uses full Two-Phase Simplex with artificial variable elimination
+ * and strict timeout bounds to prevent blocking the event loop or UI thread.
  */
 export function solveGeneralLP(
   c: number[],
@@ -440,7 +441,8 @@ export function solveGeneralLP(
   A_ineq: number[][],
   b_ineq: number[],
   lb: number[],
-  ub: number[]
+  ub: number[],
+  timeoutMs: number = 5000
 ): GeneralLPSolution {
   const n = c.length;
   const m_eq = A_eq.length;
@@ -574,9 +576,13 @@ export function solveGeneralLP(
     }
     tableau.push(Array.from(phase1Row));
     const objRowIdx = tableau.length - 1;
+    const solverStartTime = Date.now();
 
     while (iterations < maxIters) {
       iterations++;
+      if (iterations % 50 === 0 && Date.now() - solverStartTime > timeoutMs) {
+        return { status: "TIMEOUT", x: [], objValue: Infinity, iterations };
+      }
       let enterCol = -1;
       let maxCost = 1e-7;
       for (let cIdx = 0; cIdx < n + totalSlacks; cIdx++) {
@@ -620,6 +626,7 @@ export function solveGeneralLP(
   }
   tableau.push(Array.from(phase2Row));
   const objRowIdx = tableau.length - 1;
+  const solverStartTimePhase2 = Date.now();
 
   for (let r = 0; r < totalRows; r++) {
     const bCol = basis[r];
@@ -635,6 +642,9 @@ export function solveGeneralLP(
 
   while (iterations < maxIters) {
     iterations++;
+    if (iterations % 50 === 0 && Date.now() - solverStartTimePhase2 > timeoutMs) {
+      return { status: "TIMEOUT", x: [], objValue: Infinity, iterations };
+    }
     let enterCol = -1;
     let maxCost = 1e-7;
     for (let cIdx = 0; cIdx < n + totalSlacks; cIdx++) {

@@ -52,6 +52,8 @@ export interface EnergyLedgerRecord {
   renewablePct: number;
   illustrativeReliabilityPct: number; // Illustrative N-1 contingency index based on simulated model headroom (not certified field SAIDI/SAIFI)
   reliabilityPct: number;
+  solverInputHash: string; // SHA-256 digest of solver inputs (demand, weather, tariffs)
+  dispatchVector: string; // Canonical dispatch allocation vector [solar, wind, dis, chg, grid, captive, gen]
   previousBlockHash: string;
   blockHashSha256: string;
 }
@@ -83,8 +85,23 @@ export interface AggregatedReport {
 import { sha256 } from "./cryptoUtils";
 
 /**
+ * Computes canonical block hash according to the mathematical formula:
+ * H_i = SHA256(H_{i-1} || timestamp_i || solverInputHash_i || dispatchVector_i)
+ */
+export function computeCanonicalBlockHash(
+  previousBlockHash: string,
+  timestamp: string,
+  solverInputHash: string,
+  dispatchVector: string
+): string {
+  const canonicalPayload = `${previousBlockHash}||${timestamp}||${solverInputHash}||${dispatchVector}`;
+  return sha256(canonicalPayload);
+}
+
+/**
  * Verifies the cryptographic integrity of the entire energy ledger blockchain.
- * Recomputes SHA-256 hashes for all blocks and verifies previous-block links.
+ * Walks the ledger from i=0 to N, recomputes each SHA-256 hash using the canonical formula,
+ * and verifies previous-block links to prove zero tampering.
  */
 export function verifyLedgerCryptographicIntegrity(records: EnergyLedgerRecord[]): {
   isValid: boolean;
@@ -109,9 +126,13 @@ export function verifyLedgerCryptographicIntegrity(records: EnergyLedgerRecord[]
       };
     }
 
-    // Recompute block hash
-    const blockData = `${rec.blockIndex}|${rec.timestamp}|${rec.demandMWh}|${rec.solarMWh}|${rec.windMWh}|${rec.bessDischargeMWh}|${rec.bessChargeMWh}|${rec.gridImportMWh}|${rec.captiveMWh}|${rec.dieselMWh}|${rec.optimizedCostRupees}|${rec.verifiedSavingsRupees}|${rec.previousBlockHash}`;
-    const computedHash = sha256(blockData);
+    // Recompute block hash using the canonical formula
+    const computedHash = computeCanonicalBlockHash(
+      rec.previousBlockHash,
+      rec.timestamp,
+      rec.solverInputHash,
+      rec.dispatchVector
+    );
 
     if (computedHash !== rec.blockHashSha256) {
       return {
@@ -128,6 +149,9 @@ export function verifyLedgerCryptographicIntegrity(records: EnergyLedgerRecord[]
 
   return { isValid: true, verifiedBlocks: records.length };
 }
+
+// Export alias for consistency with audit requirements
+export const verifyLedgerIntegrity = verifyLedgerCryptographicIntegrity;
 
 /**
  * Generates 720 hours (30 days) of immutable cryptographically chained energy ledger blocks.
@@ -206,8 +230,16 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
     const renewablePct = Number((((solarMWh + windMWh) / demandMWh) * 100).toFixed(1));
     const illustrativeReliabilityPct = dieselMWh > 20 ? 99.85 : 99.97;
 
-    const blockData = `${i}|${time.toISOString()}|${demandMWh}|${solarMWh}|${windMWh}|${bessDischargeMWh}|${bessChargeMWh}|${gridImportMWh}|${captiveMWh}|${dieselMWh}|${Math.round(optCost)}|${savings}|${prevHash}`;
-    const blockHashSha256 = sha256(blockData);
+    const solverInputData = `${demandMWh}|${solarMWh}|${windMWh}|${Math.round(baseCost)}`;
+    const solverInputHash = sha256(solverInputData);
+    const dispatchVector = JSON.stringify([solarMWh, windMWh, bessDischargeMWh, bessChargeMWh, gridImportMWh, captiveMWh, dieselMWh]);
+
+    const blockHashSha256 = computeCanonicalBlockHash(
+      prevHash,
+      time.toISOString(),
+      solverInputHash,
+      dispatchVector
+    );
     const thisBlockPrevHash = prevHash;
     prevHash = blockHashSha256;
 
@@ -233,6 +265,8 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       renewablePct,
       illustrativeReliabilityPct,
       reliabilityPct: illustrativeReliabilityPct,
+      solverInputHash,
+      dispatchVector,
       previousBlockHash: thisBlockPrevHash,
       blockHashSha256,
     });

@@ -481,27 +481,151 @@ export function attemptPhysicalActuation(plan: DispatchCommand): {
   };
 }
 
+import { z } from "zod";
+
 /**
- * Software Watchdog & Synthetic Comm-Loss Simulator
- * Simulates industrial heartbeat monitoring for testing fail-safe state machines.
+ * Strict Runtime Zod Command Validation Schema
+ * Enforces rigorous type, range, and format contracts between the LP Optimizer output
+ * and the SCADA equipment dispatch emitter.
+ */
+export const ScadaDispatchSetpointsSchema = z.object({
+  solarCurtailmentMW: z.number().min(0).max(200),
+  windCurtailmentMW: z.number().min(0).max(150),
+  bessDischargeMW: z.number().min(0).max(90),
+  bessChargeMW: z.number().min(0).max(80),
+  gridContractMW: z.number().min(0).max(250),
+  gridExcessMW: z.number().min(0).max(50),
+  captiveMW: z.number().min(30).max(95),
+  generatorMW: z.number().min(0).max(120),
+  generatorCommitted: z.boolean(),
+});
+
+export type ScadaSetpoints = z.infer<typeof ScadaDispatchSetpointsSchema>;
+
+export const ScadaDispatchCommandSchema = z.object({
+  commandId: z.string().min(5),
+  timestamp: z.string().min(10),
+  heartbeatTimestampMs: z.number().int().positive(),
+  source: z.literal("LP_OPTIMIZATION_ENGINE"),
+  setpoints: ScadaDispatchSetpointsSchema,
+  operatorAuthorization: z.object({
+    authorized: z.boolean(),
+    operatorId: z.string().min(1),
+    signature: z.string().min(16),
+  }),
+});
+
+export type ScadaDispatchCommand = z.infer<typeof ScadaDispatchCommandSchema>;
+
+/**
+ * Deadband Filter (0.5 kW / 0.0005 MW threshold)
+ * Prevents actuator chatter, excessive PLC register writes, and switchgear mechanical wear
+ * by suppressing setpoint changes smaller than the deadband limit.
+ */
+export const SCADA_DEADBAND_THRESHOLD_MW = 0.0005; // 0.5 kW
+
+export function applyDeadbandFilter(
+  newSetpoints: ScadaSetpoints,
+  currentSetpoints: ScadaSetpoints,
+  deadbandThresholdMW = SCADA_DEADBAND_THRESHOLD_MW
+): { filteredSetpoints: ScadaSetpoints; suppressedAssets: string[]; modifiedAssets: string[] } {
+  const filtered = { ...newSetpoints };
+  const suppressedAssets: string[] = [];
+  const modifiedAssets: string[] = [];
+
+  const checkKeys: (keyof Omit<ScadaSetpoints, "generatorCommitted">)[] = [
+    "solarCurtailmentMW",
+    "windCurtailmentMW",
+    "bessDischargeMW",
+    "bessChargeMW",
+    "gridContractMW",
+    "gridExcessMW",
+    "captiveMW",
+    "generatorMW",
+  ];
+
+  for (const key of checkKeys) {
+    const delta = Math.abs(newSetpoints[key] - currentSetpoints[key]);
+    if (delta > 0 && delta < deadbandThresholdMW) {
+      filtered[key] = currentSetpoints[key]; // Suppress jitter
+      suppressedAssets.push(`${key} (delta: ${(delta * 1000).toFixed(2)} kW < ${(deadbandThresholdMW * 1000).toFixed(1)} kW)`);
+    } else if (delta >= deadbandThresholdMW) {
+      modifiedAssets.push(key);
+    }
+  }
+
+  return { filteredSetpoints: filtered, suppressedAssets, modifiedAssets };
+}
+
+/**
+ * Software Watchdog & Stale Telemetry Fail-Safe Demarcation
+ * Monitors heartbeat freshness. If telemetry is older than 10 seconds,
+ * automated dispatch is strictly locked out and a high-priority operator alarm is raised.
  */
 export class ScadaWatchdogMonitor {
   private lastHeartbeatMs: number = Date.now();
+  private lastTelemetryTimestampMs: number = Date.now();
+  private maxStaleTelemetrySec: number = 10;
   private isSafeIslandMode: boolean = false;
+  private isReadOnlyFallback: boolean = false;
 
   public pingHeartbeat(): void {
     this.lastHeartbeatMs = Date.now();
-    this.isSafeIslandMode = false;
   }
 
-  public checkHealth(): { isHealthy: boolean; mode: "NORMAL_SYNC" | "SAFE_FALLBACK_ISLAND" } {
-    const elapsedSec = (Date.now() - this.lastHeartbeatMs) / 1000;
-    if (elapsedSec > 10) {
-      this.isSafeIslandMode = true;
-      return { isHealthy: false, mode: "SAFE_FALLBACK_ISLAND" };
+  public updateTelemetryTimestamp(timestampMs: number = Date.now()): void {
+    this.lastTelemetryTimestampMs = timestampMs;
+    this.checkHealth();
+  }
+
+  public checkHealth(): {
+    isHealthy: boolean;
+    mode: "NORMAL_SYNC" | "SAFE_FALLBACK_ISLAND" | "READ_ONLY_FALLBACK";
+    staleSeconds: number;
+    error?: string;
+  } {
+    const now = Date.now();
+    const staleTelemetrySec = (now - this.lastTelemetryTimestampMs) / 1000;
+    const staleHeartbeatSec = (now - this.lastHeartbeatMs) / 1000;
+
+    // Stale telemetry lockout (> 10s)
+    if (staleTelemetrySec > this.maxStaleTelemetrySec) {
+      this.isReadOnlyFallback = true;
+      return {
+        isHealthy: false,
+        mode: "READ_ONLY_FALLBACK",
+        staleSeconds: Number(staleTelemetrySec.toFixed(1)),
+        error: `CRITICAL SCADA ALERT: Telemetry is stale (${staleTelemetrySec.toFixed(1)}s > ${this.maxStaleTelemetrySec}s). Automated dispatch locked out. Operating in Read-Only Fallback mode.`,
+      };
     }
-    return { isHealthy: true, mode: "NORMAL_SYNC" };
+
+    // Heartbeat loss
+    if (staleHeartbeatSec > this.maxStaleTelemetrySec) {
+      this.isSafeIslandMode = true;
+      return {
+        isHealthy: false,
+        mode: "SAFE_FALLBACK_ISLAND",
+        staleSeconds: Number(staleHeartbeatSec.toFixed(1)),
+        error: `COMMUNICATION LOSS: Heartbeat timeout (${staleHeartbeatSec.toFixed(1)}s). Switched to Safe Island mode.`,
+      };
+    }
+
+    this.isReadOnlyFallback = false;
+    this.isSafeIslandMode = false;
+    return { isHealthy: true, mode: "NORMAL_SYNC", staleSeconds: 0 };
+  }
+
+  public canDispatch(): { allowed: boolean; reason?: string } {
+    const health = this.checkHealth();
+    if (!health.isHealthy) {
+      return {
+        allowed: false,
+        reason: health.error || "SCADA Watchdog failure: Automated dispatch blocked.",
+      };
+    }
+    return { allowed: true };
   }
 }
 
 export const scadaWatchdog = new ScadaWatchdogMonitor();
+
