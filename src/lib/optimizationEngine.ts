@@ -124,8 +124,7 @@ export type OptimizationSolverStatus =
   | "FEASIBLE_SUBOPTIMAL"
   | "INFEASIBLE_DEFICIT"
   | "LIMIT_EXCEEDED_INFEASIBLE"
-  | "NUMERICAL_FAILURE"
-  | "OPTIMAL_CONVERGED";
+  | "NUMERICAL_FAILURE";
 
 export interface OptimalityProof {
   isMathematicallyProvenGlobal: boolean;
@@ -1477,7 +1476,24 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     | "INCOMPLETE_SEARCH_BUDGET"
     | "BELLMAN_DYNAMIC_PROGRAMMING" = "BRANCH_AND_BOUND_MILP";
 
-  // Step 2a: Evaluate all-offline candidate u = [0, ..., 0] as baseline incumbent
+  // Step 2a: Solve Root Continuous Relaxation
+  // By linear programming duality, relaxing discrete binary generator commitments to continuous
+  // bounds [0, generatorMaxMW] provides an unassailable mathematical lower bound Z_root <= Z_MILP*
+  // for any feasible mixed-integer schedule in the entire horizon.
+  const rootFixed: (boolean | null)[] = new Array(H).fill(null);
+  const rootResult = buildAndSolveNodeLP(rootFixed);
+  totalSimplexIterations += rootResult.sol.iterations;
+  exploredNodesCount++;
+
+  let rootOpenQueue: BnBNode[] = [];
+
+  if (rootResult.sol.status === "OPTIMAL") {
+    rootRelaxationFeasible = true;
+    rootLowerBound = rootResult.sol.objValue;
+    rootOpenQueue = [{ fixed: rootFixed, lowerBound: rootResult.sol.objValue, depth: 0 }];
+  }
+
+  // Step 2b: Evaluate all-offline candidate u = [0, ..., 0] as baseline incumbent
   const allZeroCommitment = new Array(H).fill(false);
   const allZeroResult = buildAndSolveNodeLP(allZeroCommitment);
   totalSimplexIterations += allZeroResult.sol.iterations;
@@ -1487,140 +1503,123 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     bestCommitment = allZeroCommitment;
     bestTotalCostWithStartup = allZeroResult.sol.objValue + allZeroResult.startupCostTotal;
 
-    // Check Convex Relaxation Dominance:
-    // If all-offline u = [0, ..., 0] is feasible with 0 grid excess and 0 unserved energy,
-    // diesel generation (Rs 22.56/kWh + startup) cannot lower costs below cleaner assets.
-    let hasGridExcess = false;
-    for (let t = 0; t < H; t++) {
-      if ((allZeroResult.sol.x[t * VARS_PER_HOUR + 5] ?? 0) > 0.05) {
-        hasGridExcess = true;
-        break;
-      }
-    }
-    if (!hasGridExcess) {
+    // Rigorous Dual-Bound Dominance Proof:
+    // If the integer all-offline schedule matches the root continuous relaxation lower bound
+    // (Z_allZero <= Z_root + 1e-4), then by weak duality no integer schedule in {0, 1}^H can achieve
+    // a strictly lower objective cost. Global optimality is mathematically proven without branching.
+    // If Z_allZero > Z_root + 1e-4 (e.g., diesel relieves grid excess penalties, startup costs, or ramp limits),
+    // dominance DOES NOT hold and Branch-and-Bound must proceed.
+    if (rootRelaxationFeasible && bestTotalCostWithStartup <= rootLowerBound + 1e-4) {
       isProvenGlobal = true;
       proofMethod = "CONVEX_RELAXATION_DOMINANCE";
       rootLowerBound = bestTotalCostWithStartup;
       exploredNodesCount = 1;
       openNodesRemaining = 0;
+      rootOpenQueue = [];
     }
   }
 
-  // Step 2b: Branch-and-Bound Tree Search (if not proven by dominance)
-  if (!isProvenGlobal) {
-    // Root continuous relaxation
-    const rootFixed: (boolean | null)[] = new Array(H).fill(null);
-    const rootResult = buildAndSolveNodeLP(rootFixed);
-    totalSimplexIterations += rootResult.sol.iterations;
-    exploredNodesCount++;
+  // Step 2c: Branch-and-Bound Tree Search (if not proven by dual dominance)
+  if (!isProvenGlobal && rootRelaxationFeasible) {
+    while (rootOpenQueue.length > 0 && exploredNodesCount < maxBnBNodes) {
+      // Best-bound selection: node with minimal lowerBound
+      rootOpenQueue.sort((a, b) => a.lowerBound - b.lowerBound);
+      const currentNode = rootOpenQueue.shift();
+      if (!currentNode) break;
 
-    if (rootResult.sol.status === "OPTIMAL") {
-      rootRelaxationFeasible = true;
-      rootLowerBound = rootResult.sol.objValue;
-      let rootOpenQueue: BnBNode[] = [
-        { fixed: rootFixed, lowerBound: rootResult.sol.objValue, depth: 0 },
-      ];
-
-      while (rootOpenQueue.length > 0 && exploredNodesCount < maxBnBNodes) {
-        // Best-bound selection: node with minimal lowerBound
-        rootOpenQueue.sort((a, b) => a.lowerBound - b.lowerBound);
-        const currentNode = rootOpenQueue.shift();
-        if (!currentNode) break;
-
-        // Bound fathoming
-        if (currentNode.lowerBound >= bestTotalCostWithStartup - 1e-4) {
-          // All remaining open nodes have lowerBound >= currentNode.lowerBound >= bestTotalCostWithStartup
-          rootOpenQueue = [];
-          isProvenGlobal = true;
-          break; // All remaining open nodes fathomed!
-        }
-
-        const nodeResult = buildAndSolveNodeLP(currentNode.fixed);
-        totalSimplexIterations += nodeResult.sol.iterations;
-        exploredNodesCount++;
-
-        if (nodeResult.sol.status !== "OPTIMAL") {
-          continue; // Infeasible node fathomed
-        }
-
-        const nodeLowerBound = nodeResult.sol.objValue + nodeResult.startupCostTotal;
-        if (nodeLowerBound >= bestTotalCostWithStartup - 1e-4) {
-          continue; // Bound pruned
-        }
-
-        // Check for fractional variables: unfixed t where 0 < P_gen < minMW
-        let mostFractionalIdx = -1;
-        let maxFractionality = -1;
-
-        for (let t = 0; t < H; t++) {
-          if (currentNode.fixed[t] === null) {
-            const pGen = nodeResult.sol.x[t * VARS_PER_HOUR + 7] ?? 0;
-            if (pGen > 0.05 && pGen < c.generatorMinMW - 0.05) {
-              const fractionality = Math.min(pGen, c.generatorMinMW - pGen);
-              if (fractionality > maxFractionality) {
-                maxFractionality = fractionality;
-                mostFractionalIdx = t;
-              }
-            }
-          }
-        }
-
-        if (mostFractionalIdx === -1) {
-          // Integer-feasible candidate found!
-          const candidateCommitment: boolean[] = [];
-          for (let t = 0; t < H; t++) {
-            if (currentNode.fixed[t] !== null) {
-              candidateCommitment.push(currentNode.fixed[t] as boolean);
-            } else {
-              const pGen = nodeResult.sol.x[t * VARS_PER_HOUR + 7] ?? 0;
-              candidateCommitment.push(pGen >= c.generatorMinMW - 0.05);
-            }
-          }
-
-          // Evaluate exact integer LP
-          const intResult = buildAndSolveNodeLP(candidateCommitment);
-          totalSimplexIterations += intResult.sol.iterations;
-          if (intResult.sol.status === "OPTIMAL") {
-            const intCost = intResult.sol.objValue + intResult.startupCostTotal;
-            if (intCost < bestTotalCostWithStartup) {
-              bestTotalCostWithStartup = intCost;
-              bestSolution = intResult.sol;
-              bestCommitment = candidateCommitment;
-            }
-          }
-        } else {
-          // Branch on most fractional variable
-          const branch0 = [...currentNode.fixed];
-          branch0[mostFractionalIdx] = false;
-          const branch1 = [...currentNode.fixed];
-          branch1[mostFractionalIdx] = true;
-
-          rootOpenQueue.push({
-            fixed: branch0,
-            lowerBound: nodeLowerBound,
-            depth: currentNode.depth + 1,
-          });
-          rootOpenQueue.push({
-            fixed: branch1,
-            lowerBound: nodeLowerBound,
-            depth: currentNode.depth + 1,
-          });
-        }
-      }
-
-      if (rootOpenQueue.length === 0) {
+      // Bound fathoming
+      if (currentNode.lowerBound >= bestTotalCostWithStartup - 1e-4) {
+        // All remaining open nodes have lowerBound >= currentNode.lowerBound >= bestTotalCostWithStartup
+        rootOpenQueue = [];
         isProvenGlobal = true;
-        openNodesRemaining = 0;
-      } else {
-        isProvenGlobal = false;
-        openNodesRemaining = rootOpenQueue.length;
-        proofMethod = "INCOMPLETE_SEARCH_BUDGET";
-        const minOpenLowerBound = Math.min(...rootOpenQueue.map((n) => n.lowerBound));
-        rootLowerBound = Math.max(
-          rootLowerBound,
-          Math.min(minOpenLowerBound, bestTotalCostWithStartup),
-        );
+        break; // All remaining open nodes fathomed!
       }
+
+      const nodeResult = buildAndSolveNodeLP(currentNode.fixed);
+      totalSimplexIterations += nodeResult.sol.iterations;
+      exploredNodesCount++;
+
+      if (nodeResult.sol.status !== "OPTIMAL") {
+        continue; // Infeasible node fathomed
+      }
+
+      const nodeLowerBound = nodeResult.sol.objValue + nodeResult.startupCostTotal;
+      if (nodeLowerBound >= bestTotalCostWithStartup - 1e-4) {
+        continue; // Bound pruned
+      }
+
+      // Check for fractional variables: unfixed t where 0 < P_gen < minMW
+      let mostFractionalIdx = -1;
+      let maxFractionality = -1;
+
+      for (let t = 0; t < H; t++) {
+        if (currentNode.fixed[t] === null) {
+          const pGen = nodeResult.sol.x[t * VARS_PER_HOUR + 7] ?? 0;
+          if (pGen > 0.05 && pGen < c.generatorMinMW - 0.05) {
+            const fractionality = Math.min(pGen, c.generatorMinMW - pGen);
+            if (fractionality > maxFractionality) {
+              maxFractionality = fractionality;
+              mostFractionalIdx = t;
+            }
+          }
+        }
+      }
+
+      if (mostFractionalIdx === -1) {
+        // Integer-feasible candidate found!
+        const candidateCommitment: boolean[] = [];
+        for (let t = 0; t < H; t++) {
+          if (currentNode.fixed[t] !== null) {
+            candidateCommitment.push(currentNode.fixed[t] as boolean);
+          } else {
+            const pGen = nodeResult.sol.x[t * VARS_PER_HOUR + 7] ?? 0;
+            candidateCommitment.push(pGen >= c.generatorMinMW - 0.05);
+          }
+        }
+
+        // Evaluate exact integer LP
+        const intResult = buildAndSolveNodeLP(candidateCommitment);
+        totalSimplexIterations += intResult.sol.iterations;
+        if (intResult.sol.status === "OPTIMAL") {
+          const intCost = intResult.sol.objValue + intResult.startupCostTotal;
+          if (intCost < bestTotalCostWithStartup) {
+            bestTotalCostWithStartup = intCost;
+            bestSolution = intResult.sol;
+            bestCommitment = candidateCommitment;
+          }
+        }
+      } else {
+        // Branch on most fractional variable
+        const branch0 = [...currentNode.fixed];
+        branch0[mostFractionalIdx] = false;
+        const branch1 = [...currentNode.fixed];
+        branch1[mostFractionalIdx] = true;
+
+        rootOpenQueue.push({
+          fixed: branch0,
+          lowerBound: nodeLowerBound,
+          depth: currentNode.depth + 1,
+        });
+        rootOpenQueue.push({
+          fixed: branch1,
+          lowerBound: nodeLowerBound,
+          depth: currentNode.depth + 1,
+        });
+      }
+    }
+
+    if (rootOpenQueue.length === 0) {
+      isProvenGlobal = true;
+      openNodesRemaining = 0;
+    } else {
+      isProvenGlobal = false;
+      openNodesRemaining = rootOpenQueue.length;
+      proofMethod = "INCOMPLETE_SEARCH_BUDGET";
+      const minOpenLowerBound = Math.min(...rootOpenQueue.map((n) => n.lowerBound));
+      rootLowerBound = Math.max(
+        rootLowerBound,
+        Math.min(minOpenLowerBound, bestTotalCostWithStartup),
+      );
     }
   }
 

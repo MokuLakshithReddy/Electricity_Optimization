@@ -517,31 +517,13 @@ function solveContinuousHorizonLP(
 export function solveIndependentCandidateSearch(input: HorizonDispatchInput): ReferenceMILPResult {
   const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
   const H = input.horizonHours;
-  const initialGenCommitted = input.initialGeneratorCommitted ?? false;
-
-  // First: check all-offline schedule u = [0, ..., 0]
-  const allZero = new Array(H).fill(false);
-  const allZeroRes = solveContinuousHorizonLP(allZero, input, c);
-
-  if (allZeroRes.sol.status === "OPTIMAL") {
-    let hasGridExcess = false;
-    for (let t = 0; t < H; t++) {
-      if ((allZeroRes.xFull[t * 8 + 5] ?? 0) > 0.05) {
-        hasGridExcess = true;
-        break;
-      }
-    }
-    if (!hasGridExcess) {
-      return buildResult(
-        allZero,
-        allZeroRes.trueTotalCost,
-        allZeroRes.xFull,
-        input,
-        c,
-        "Bellman DP (Convex Dominance Minimum)",
-      );
-    }
+  // For small horizons (H <= 10), execute exact exhaustive 2^H evaluation across all binary commitment schedules
+  if (H <= 10) {
+    return solveExhaustiveReferenceMILP(input, 10);
   }
+
+  // First: register all-offline schedule u = [0, ..., 0] as baseline candidate
+  const allZero = new Array(H).fill(false);
 
   // Comprehensive Binary Unit Commitment Exploration across all operational windows
   const candidateCommitments: boolean[][] = [];
