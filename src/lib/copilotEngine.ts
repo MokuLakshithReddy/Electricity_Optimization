@@ -67,6 +67,33 @@ function calculateCalibratedConfidence(telemetry: LivePlantTelemetry, marginMW: 
   return Math.min(99, Math.max(68, score));
 }
 
+function checkInfeasible(
+  opt: ReturnType<typeof solveEconomicDispatch>,
+  thoughts: string[],
+  demandMW: number
+): CopilotAnalysisResult | null {
+  if (!opt.isExecutablePlan || !opt.dispatch) {
+    return {
+      thoughtProcess: [...thoughts, `Infeasibility detected: Demand (${demandMW} MW) exceeds physical generation and grid limits.`],
+      responseMarkdown: `### ⚠️ Optimization Infeasible: Physical Capacity Deficit\n\n` +
+        `The plant demand of **${demandMW} MW** cannot be satisfied within physical asset and grid interconnection constraints.\n\n` +
+        `• **Solver Status**: ${opt.solverStatus}\n` +
+        `• **Execution**: **BLOCKED (Non-Executable Plan)**\n` +
+        `• **Unserved Energy Deficit**: **${opt.unservedEnergyMWh.toFixed(1)} MWh**\n` +
+        `• **Interlock Reason**: ${opt.executionBlockedReason}\n\n` +
+        `**Control Room Directive**: Initiate emergency load curtailment on secondary rolling mills before attempting dispatch execution.`,
+      calibratedConfidence: 99,
+      impact: {
+        costSavedFormatted: "₹0 (Deficit)",
+        co2AvoidedFormatted: "0 t/hr",
+        reliabilityFormatted: "70.0%",
+        confidence: 99,
+      },
+    };
+  }
+  return null;
+}
+
 /**
  * Analyzes natural language operator inquiries and executes live mathematical reasoning.
  */
@@ -100,6 +127,10 @@ export function analyzeCopilotQuery(
       currentTariffTier: telemetry.tariffTier,
     });
 
+    const infeasible = checkInfeasible(opt, thoughts, telemetry.demandMW);
+    if (infeasible) return infeasible;
+
+    const dispatch = opt.dispatch!;
     const confidence = calculateCalibratedConfidence(telemetry, 25);
 
     let explanation = `### Real-Time Cost Driver Analysis\n\n`;
@@ -112,23 +143,23 @@ export function analyzeCopilotQuery(
       explanation += `2. **Peaking Diesel Genset Dispatched**: Diesel units are carrying **${telemetry.generatorMW} MW** at **₹22.56/kWh**, adding ~₹${(telemetry.generatorMW * 22560).toLocaleString("en-IN")}/hr.\n`;
     }
     if (telemetry.batterySOC > 30 && telemetry.batteryMW < 60 && telemetry.tariffTier === "Peak") {
-      explanation += `3. **Suboptimal Battery Arbitrage**: Battery SoC is healthy at **${telemetry.batterySOC}%**, but discharge is only **${telemetry.batteryMW} MW**. Increasing discharge to **${opt.dispatch.batteryDischargeMW} MW** will immediately offset peak grid import.\n`;
+      explanation += `3. **Suboptimal Battery Arbitrage**: Battery SoC is healthy at **${telemetry.batterySOC}%**, but discharge is only **${telemetry.batteryMW} MW**. Increasing discharge to **${dispatch.batteryDischargeMW} MW** will immediately offset peak grid import.\n`;
     }
 
     explanation += `\n**Optimization Recommendation:**\n`;
-    explanation += `Dispatch **${opt.dispatch.batteryDischargeMW} MW** from BESS to ramp down grid import from ${telemetry.gridMW} MW to ${opt.dispatch.gridMW} MW, saving an estimated **₹${((telemetry.gridMW - opt.dispatch.gridMW) * gridRate * 1000).toLocaleString("en-IN")}/hr**.`;
+    explanation += `Dispatch **${dispatch.batteryDischargeMW} MW** from BESS to ramp down grid import from ${telemetry.gridMW} MW to ${dispatch.gridMW} MW, saving an estimated **₹${((telemetry.gridMW - dispatch.gridMW) * gridRate * 1000).toLocaleString("en-IN")}/hr**.`;
 
     return {
       thoughtProcess: thoughts,
       responseMarkdown: explanation,
       calibratedConfidence: confidence,
       decisionSetpoints: {
-        solarMW: opt.dispatch.solarMW,
-        windMW: opt.dispatch.windMW,
-        batteryMW: opt.dispatch.batteryDischargeMW,
-        gridMW: opt.dispatch.gridMW,
-        captiveMW: opt.dispatch.captiveMW,
-        generatorMW: opt.dispatch.generatorMW,
+        solarMW: dispatch.solarMW,
+        windMW: dispatch.windMW,
+        batteryMW: dispatch.batteryDischargeMW,
+        gridMW: dispatch.gridMW,
+        captiveMW: dispatch.captiveMW,
+        generatorMW: dispatch.generatorMW,
       },
       impact: {
         costSavedFormatted: `₹${(opt.hourlySavings / 100000).toFixed(1)} L/hr`,
@@ -139,7 +170,7 @@ export function analyzeCopilotQuery(
       executableAction: {
         label: "Apply Optimal Dispatch Setpoints",
         actionType: "APPLY_SETPOINTS",
-        payload: opt.dispatch,
+        payload: dispatch,
       },
     };
   }
@@ -212,17 +243,21 @@ export function analyzeCopilotQuery(
       currentTariffTier: telemetry.tariffTier,
     });
 
-    thoughts.push(`Redispatch solved: BESS takes +${(opt.dispatch.batteryDischargeMW - telemetry.batteryMW).toFixed(1)} MW, Grid takes ${(opt.dispatch.gridMW - telemetry.gridMW).toFixed(1)} MW.`);
+    const infeasible = checkInfeasible(opt, thoughts, telemetry.demandMW);
+    if (infeasible) return infeasible;
+    const dispatch = opt.dispatch!;
+
+    thoughts.push(`Redispatch solved: BESS takes +${(dispatch.batteryDischargeMW - telemetry.batteryMW).toFixed(1)} MW, Grid takes ${(dispatch.gridMW - telemetry.gridMW).toFixed(1)} MW.`);
 
     const confidence = calculateCalibratedConfidence(telemetry, 20);
 
     const explanation = `### Solar Cloud-Event Dynamic Sensitivity Analysis\n\n` +
       `If solar generation drops by **30%** (from **${telemetry.solarMW} MW** down to **${degradedSolar} MW**, a **${deficitMW} MW gap**):\n\n` +
       `**Automated Redispatch Solution:**\n` +
-      `1. **BESS Fast-Discharge**: Ramped up from ${telemetry.batteryMW} MW to **${opt.dispatch.batteryDischargeMW} MW** (sub-100ms PCS response) to absorb the immediate intermittency without frequency dip.\n` +
-      `2. **Captive Thermal Modulation**: Ramped up to **${opt.dispatch.captiveMW} MW** within governor ramp limit (+3 MW/min).\n` +
-      `3. **Grid Incomer Step**: Adjusted to **${opt.dispatch.gridMW} MW**, staying within the 250 MW contract demand limit.\n` +
-      `4. **Peaker Gensets**: Held in standby (**${opt.dispatch.generatorMW} MW**) — diesel consumption completely avoided.\n\n` +
+      `1. **BESS Fast-Discharge**: Ramped up from ${telemetry.batteryMW} MW to **${dispatch.batteryDischargeMW} MW** (sub-100ms PCS response) to absorb the immediate intermittency without frequency dip.\n` +
+      `2. **Captive Thermal Modulation**: Ramped up to **${dispatch.captiveMW} MW** within governor ramp limit (+3 MW/min).\n` +
+      `3. **Grid Incomer Step**: Adjusted to **${dispatch.gridMW} MW**, staying within the 250 MW contract demand limit.\n` +
+      `4. **Peaker Gensets**: Held in standby (**${dispatch.generatorMW} MW**) — diesel consumption completely avoided.\n\n` +
       `**Reliability Assessment:**\n` +
       `• Plant reliability holds steady at **${opt.reliabilityPct}%**.\n` +
       `• Incremental operating cost impact: **+₹${(deficitMW * (tariffRates.gridShoulder - tariffRates.solar) * 1000).toLocaleString("en-IN")}/hr**.`;
@@ -231,7 +266,7 @@ export function analyzeCopilotQuery(
       thoughtProcess: thoughts,
       responseMarkdown: explanation,
       calibratedConfidence: confidence,
-      decisionSetpoints: opt.dispatch,
+      decisionSetpoints: dispatch,
       impact: {
         costSavedFormatted: `₹${(opt.hourlySavings / 100000).toFixed(1)} L/hr`,
         co2AvoidedFormatted: `${Math.round(opt.co2AvoidedPerHour)} t/hr`,
@@ -259,17 +294,21 @@ export function analyzeCopilotQuery(
       constraints: { batteryCapacityMWh: 0, batteryMaxDischargeMW: 0 },
     });
 
-    thoughts.push(`N-1 solved: Grid increased to ${opt.dispatch.gridMW} MW, Captive to ${opt.dispatch.captiveMW} MW, Gen to ${opt.dispatch.generatorMW} MW.`);
+    const infeasible = checkInfeasible(opt, thoughts, telemetry.demandMW);
+    if (infeasible) return infeasible;
+    const dispatch = opt.dispatch!;
+
+    thoughts.push(`N-1 solved: Grid increased to ${dispatch.gridMW} MW, Captive to ${dispatch.captiveMW} MW, Gen to ${dispatch.generatorMW} MW.`);
     const confidence = calculateCalibratedConfidence(telemetry, 15);
 
     const explanation = `### N-1 Contingency Analysis: Battery BESS Outage\n\n` +
       `**Contingency Result**: Yes, the plant will survive without shedding critical load.\n\n` +
       `**Physical Redispatch Schedule Under BESS Outage:**\n` +
-      `• **Solar PV**: Absorbed at ${opt.dispatch.solarMW} MW (any sudden surplus will need inverter curtailment without storage buffer).\n` +
-      `• **Wind Farm**: ${opt.dispatch.windMW} MW.\n` +
-      `• **Captive Power Plant**: Ramped to **${opt.dispatch.captiveMW} MW** (max available capacity).\n` +
-      `• **Grid Incomer**: Increased to **${opt.dispatch.gridMW} MW** (contract demand headroom: ${(250 - opt.dispatch.gridMW).toFixed(0)} MW).\n` +
-      `• **Diesel Peaker (DG-1 & DG-2)**: Auto-started at **${opt.dispatch.generatorMW} MW** to maintain spinning reserve margin.\n\n` +
+      `• **Solar PV**: Absorbed at ${dispatch.solarMW} MW (any sudden surplus will need inverter curtailment without storage buffer).\n` +
+      `• **Wind Farm**: ${dispatch.windMW} MW.\n` +
+      `• **Captive Power Plant**: Ramped to **${dispatch.captiveMW} MW** (max available capacity).\n` +
+      `• **Grid Incomer**: Increased to **${dispatch.gridMW} MW** (contract demand headroom: ${(250 - dispatch.gridMW).toFixed(0)} MW).\n` +
+      `• **Diesel Peaker (DG-1 & DG-2)**: Auto-started at **${dispatch.generatorMW} MW** to maintain spinning reserve margin.\n\n` +
       `**Financial & Risk Impact:**\n` +
       `• Loss of ToD peak arbitrage and diesel start increases hourly cost by **+₹1.6 L/hr**.\n` +
       `• Power reliability: **${opt.reliabilityPct}%** across Rolling Mills and Melt Shop.\n` +
@@ -279,7 +318,7 @@ export function analyzeCopilotQuery(
       thoughtProcess: thoughts,
       responseMarkdown: explanation,
       calibratedConfidence: confidence,
-      decisionSetpoints: opt.dispatch,
+      decisionSetpoints: dispatch,
       impact: {
         costSavedFormatted: "+₹1.6 L/hr cost",
         co2AvoidedFormatted: "+38 t/hr CO₂",
@@ -305,6 +344,10 @@ export function analyzeCopilotQuery(
       currentTariffTier: telemetry.tariffTier,
     });
 
+    const infeasible = checkInfeasible(opt, thoughts, telemetry.demandMW);
+    if (infeasible) return infeasible;
+    const dispatch = opt.dispatch!;
+
     const confidence = calculateCalibratedConfidence(telemetry, 28);
 
     const explanation = `### Decarbonization & ESG Optimization Strategy\n\n` +
@@ -318,7 +361,7 @@ export function analyzeCopilotQuery(
       thoughtProcess: thoughts,
       responseMarkdown: explanation,
       calibratedConfidence: confidence,
-      decisionSetpoints: opt.dispatch,
+      decisionSetpoints: dispatch,
       impact: {
         costSavedFormatted: `₹${(opt.hourlySavings / 100000).toFixed(1)} L/hr`,
         co2AvoidedFormatted: `${Math.round(opt.co2AvoidedPerHour * 24)} t/day`,
@@ -338,11 +381,15 @@ export function analyzeCopilotQuery(
     currentTariffTier: telemetry.tariffTier,
   });
 
+  const infeasible = checkInfeasible(opt, thoughts, telemetry.demandMW);
+  if (infeasible) return infeasible;
+  const dispatch = opt.dispatch!;
+
   const confidence = calculateCalibratedConfidence(telemetry, 25);
 
   const explanation = `### IntelliGrid Autonomous Dispatch Summary\n\n` +
     `• **Active Demand**: **${telemetry.demandMW} MW**\n` +
-    `• **Generation Balance**: Solar: ${opt.dispatch.solarMW} MW | Wind: ${opt.dispatch.windMW} MW | BESS: ${opt.dispatch.batteryDischargeMW} MW | Captive: ${opt.dispatch.captiveMW} MW | Grid: ${opt.dispatch.gridMW} MW | Genset: ${opt.dispatch.generatorMW} MW\n` +
+    `• **Generation Balance**: Solar: ${dispatch.solarMW} MW | Wind: ${dispatch.windMW} MW | BESS: ${dispatch.batteryDischargeMW} MW | Captive: ${dispatch.captiveMW} MW | Grid: ${dispatch.gridMW} MW | Genset: ${dispatch.generatorMW} MW\n` +
     `• **Tariff Status**: **${telemetry.tariffTier} Window** (Marginal cost: ₹${opt.marginalCostPerKWh}/kWh)\n` +
     `• **Verified Optimization Savings**: **₹${opt.hourlySavings.toLocaleString("en-IN")}/hr** (₹${(opt.dailySavingsEstimate / 100000).toFixed(1)} Lakhs daily)\n` +
     `• **Active Constraints**: ${opt.activeConstraints.join(" • ") || "All systems nominal within standard limits."}`;
@@ -351,7 +398,7 @@ export function analyzeCopilotQuery(
     thoughtProcess: thoughts,
     responseMarkdown: explanation,
     calibratedConfidence: confidence,
-    decisionSetpoints: opt.dispatch,
+    decisionSetpoints: dispatch,
     impact: {
       costSavedFormatted: `₹${(opt.hourlySavings / 100000).toFixed(1)} L/hr`,
       co2AvoidedFormatted: `${Math.round(opt.co2AvoidedPerHour)} t/hr`,
@@ -361,7 +408,7 @@ export function analyzeCopilotQuery(
     executableAction: {
       label: "Apply Optimal Setpoints",
       actionType: "APPLY_SETPOINTS",
-      payload: opt.dispatch,
+      payload: dispatch,
     },
   };
 }

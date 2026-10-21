@@ -112,7 +112,10 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
     let reliability = optimizationResult.reliabilityPct;
     let reliabilityStatus = optimizationResult.reliabilityStatus;
 
-    if (totalSupplyMW < demandMW) {
+    if (!optimizationResult.isExecutablePlan) {
+      reliability = 72.0;
+      reliabilityStatus = "INFEASIBLE DEFICIT · Physical Capacity Breached";
+    } else if (totalSupplyMW < demandMW) {
       const deficitRatio = totalSupplyMW / Math.max(1, demandMW);
       reliability = Number(Math.max(65.0, deficitRatio * 99.97).toFixed(2));
       reliabilityStatus = `Supply Deficit (${(demandMW - totalSupplyMW).toFixed(0)} MW gap)`;
