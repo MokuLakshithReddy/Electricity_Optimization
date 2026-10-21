@@ -78,6 +78,7 @@ export interface HorizonDispatchInput {
   initialCaptiveMW?: number;
   initialGeneratorMW?: number;
   initialGeneratorCommitted?: boolean;
+  targetTerminalSOC?: number; // Target SoC at end of horizon (e.g. 50%)
   constraints?: Partial<AssetConstraints>;
   isGridAvailable?: boolean;
 }
@@ -404,6 +405,172 @@ function solveDispatchSimplex(
   };
 }
 
+export interface VerificationViolation {
+  hour: number;
+  constraint: string;
+  expected: string;
+  actual: string;
+}
+
+/**
+ * Independent Physical Constraint Verification Pass:
+ * Verifies every single interval of a completed horizon schedule against independent
+ * physical laws (power balance, ramp limits, battery SoC envelope, inverter ratings, grid limits).
+ * A schedule must NEVER be marked executable unless every interval passes this audit.
+ */
+export function verifyHorizonScheduleConstraints(
+  intervals: HorizonIntervalDispatch[],
+  c: AssetConstraints,
+  initialCaptiveMW: number,
+  initialGenMW: number,
+  initialGenCommitted: boolean,
+  initialSOC: number,
+  targetTerminalSOC?: number,
+  isGridAvailable: boolean = true
+): { isValid: boolean; violations: VerificationViolation[] } {
+  const violations: VerificationViolation[] = [];
+  const maxCaptiveRamp = c.captiveRampRateMWPerMin * 60;
+  const maxGenRamp = c.generatorRampRateMWPerMin * 60;
+  const etaSqrt = Math.sqrt(c.batteryRoundTripEfficiency);
+  const gridMax = isGridAvailable ? c.gridMaxImportMW : 0;
+
+  let prevCaptive = initialCaptiveMW;
+  let prevGen = initialGenMW;
+  let prevGenCommitted = initialGenCommitted;
+  let prevSOC = initialSOC;
+
+  for (let t = 0; t < intervals.length; t++) {
+    const inv = intervals[t];
+
+    // 1. Instantaneous Power Balance
+    const totalGen = inv.solarMW + inv.windMW + inv.gridMW + inv.captiveMW + inv.generatorMW;
+    const netSupply = totalGen + inv.batteryDischargeMW - inv.batteryChargeMW;
+    if (Math.abs(netSupply - inv.demandMW) > 0.05) {
+      violations.push({
+        hour: t,
+        constraint: "POWER_BALANCE",
+        expected: `Net supply = ${inv.demandMW} MW`,
+        actual: `Net supply = ${netSupply.toFixed(2)} MW (diff: ${(netSupply - inv.demandMW).toFixed(3)} MW)`,
+      });
+    }
+
+    // 2. Captive Ramp Envelope
+    const captiveDelta = Math.abs(inv.captiveMW - prevCaptive);
+    if (captiveDelta > maxCaptiveRamp + 0.05) {
+      violations.push({
+        hour: t,
+        constraint: "CAPTIVE_RAMP_EXCEEDED",
+        expected: `Ramp <= ${maxCaptiveRamp} MW/h`,
+        actual: `Ramp = ${captiveDelta.toFixed(2)} MW/h (from ${prevCaptive} to ${inv.captiveMW})`,
+      });
+    }
+
+    // 3. Generator Ramping & Discrete Commitment State
+    if (!prevGenCommitted && inv.generatorCommitted) {
+      // Startup transition from offline: must be between generatorMinMW and generatorMinMW + maxGenRamp
+      if (inv.generatorMW < c.generatorMinMW - 0.05 || inv.generatorMW > c.generatorMinMW + maxGenRamp + 0.05) {
+        violations.push({
+          hour: t,
+          constraint: "GENERATOR_STARTUP_RAMP_BREACH",
+          expected: `Startup output in [${c.generatorMinMW}, ${c.generatorMinMW + maxGenRamp}] MW`,
+          actual: `Startup output = ${inv.generatorMW} MW`,
+        });
+      }
+    } else if (prevGenCommitted && inv.generatorCommitted) {
+      // Running transition
+      const genDelta = Math.abs(inv.generatorMW - prevGen);
+      if (genDelta > maxGenRamp + 0.05) {
+        violations.push({
+          hour: t,
+          constraint: "GENERATOR_RUNNING_RAMP_BREACH",
+          expected: `Ramp <= ${maxGenRamp} MW/h`,
+          actual: `Ramp = ${genDelta.toFixed(2)} MW/h (from ${prevGen} to ${inv.generatorMW})`,
+        });
+      }
+    } else if (!inv.generatorCommitted && inv.generatorMW > 0) {
+      violations.push({
+        hour: t,
+        constraint: "GENERATOR_UNCOMMITTED_GENERATING",
+        expected: "Uncommitted generator must produce 0 MW",
+        actual: `Output = ${inv.generatorMW} MW`,
+      });
+    }
+
+    // 4. Battery SoC Operating Limits
+    if (inv.batterySOC < c.batteryMinSOC - 0.05 || inv.batterySOC > c.batteryMaxSOC + 0.05) {
+      violations.push({
+        hour: t,
+        constraint: "BATTERY_SOC_ENVELOPE_BREACH",
+        expected: `SOC in [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%]`,
+        actual: `SOC = ${inv.batterySOC}%`,
+      });
+    }
+
+    // 5. Battery Kinetic Energy Conservation
+    const netMWh = (inv.batteryChargeMW * etaSqrt) - (inv.batteryDischargeMW / etaSqrt);
+    const expectedSOC = Number((prevSOC + (netMWh / c.batteryCapacityMWh) * 100).toFixed(2));
+    if (Math.abs(inv.batterySOC - expectedSOC) > 0.1) {
+      violations.push({
+        hour: t,
+        constraint: "BATTERY_KINETIC_DISCONTINUITY",
+        expected: `Expected SOC = ${expectedSOC}%`,
+        actual: `Recorded SOC = ${inv.batterySOC}%`,
+      });
+    }
+
+    // 6. Inverter C-Rate Limits
+    if (inv.batteryDischargeMW > c.batteryMaxDischargeMW + 0.05) {
+      violations.push({
+        hour: t,
+        constraint: "BATTERY_DISCHARGE_INVERTER_BREACH",
+        expected: `Discharge <= ${c.batteryMaxDischargeMW} MW`,
+        actual: `Discharge = ${inv.batteryDischargeMW} MW`,
+      });
+    }
+    if (inv.batteryChargeMW > c.batteryMaxChargeMW + 0.05) {
+      violations.push({
+        hour: t,
+        constraint: "BATTERY_CHARGE_INVERTER_BREACH",
+        expected: `Charge <= ${c.batteryMaxChargeMW} MW`,
+        actual: `Charge = ${inv.batteryChargeMW} MW`,
+      });
+    }
+
+    // 7. Grid Interconnection Capacity
+    if (inv.gridMW > gridMax + 0.05) {
+      violations.push({
+        hour: t,
+        constraint: "GRID_INTERCONNECTION_LIMIT_BREACH",
+        expected: `Grid import <= ${gridMax} MW`,
+        actual: `Grid import = ${inv.gridMW} MW`,
+      });
+    }
+
+    prevCaptive = inv.captiveMW;
+    prevGen = inv.generatorMW;
+    prevGenCommitted = inv.generatorCommitted;
+    prevSOC = inv.batterySOC;
+  }
+
+  // 8. Terminal SoC Target Verification (Prevent myopic battery depletion)
+  if (intervals.length > 0 && targetTerminalSOC !== undefined && targetTerminalSOC > 0) {
+    const finalSOC = intervals[intervals.length - 1].batterySOC;
+    if (finalSOC < targetTerminalSOC - 0.5) {
+      violations.push({
+        hour: intervals.length - 1,
+        constraint: "TERMINAL_SOC_TARGET_BREACH",
+        expected: `Terminal SOC >= ${targetTerminalSOC}%`,
+        actual: `Terminal SOC = ${finalSOC}%`,
+      });
+    }
+  }
+
+  return {
+    isValid: violations.length === 0,
+    violations,
+  };
+}
+
 // ============================================================================
 // MULTI-INTERVAL HORIZON SCHEDULING WITH INTER-TEMPORAL CONSTRAINTS
 // ============================================================================
@@ -417,6 +584,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
   const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
   const H = Math.max(1, Math.min(24, input.horizonHours));
   const isGridAvailable = input.isGridAvailable ?? true;
+  const targetTerminalSOC = input.targetTerminalSOC;
 
   const etaRt = c.batteryRoundTripEfficiency;
   const etaSqrt = Math.sqrt(etaRt);
@@ -467,12 +635,38 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
         break;
     }
 
+    // Global Horizon Lookahead Valuation:
+    // Determine maximum future tariff in remaining horizon (k >= t)
+    let peakFutureTariff = gridEnergyRate;
+    for (let k = t; k < H; k++) {
+      const tier = input.hourlyTariffTier[k];
+      const rate = tier === "Peak" ? tariffRates.gridPeak : (tier === "OffPeak" ? ((tariffRates as any).gridOffPeak ?? 4.80) : tariffRates.gridShoulder);
+      if (rate > peakFutureTariff) peakFutureTariff = rate;
+    }
+
+    const isFuturePeakAhead = peakFutureTariff > gridEnergyRate + 1.5;
+    const isCurrentPeak = tariffTier === "Peak" || gridEnergyRate >= tariffRates.gridPeak - 0.1;
+
     const solarCostMWh = tariffRates.solar * 1000;
     const windCostMWh = tariffRates.wind * 1000;
     const batDegradationMWh = c.batteryDegradationCostPerMWh;
-    // ToD arbitrage: Discharging has lower relative opportunity cost in Peak; charging is prioritized in OffPeak/solar surplus
-    const batDischargeCostMWh = batDegradationMWh + (tariffTier === "Peak" ? 3100 : 7200);
-    const batChargeCostMWh = batDegradationMWh + (tariffTier === "OffPeak" ? 400 : 4200);
+
+    // Dynamic Horizon Battery Valuation:
+    // Withhold discharge during shoulder when future peak is ahead; prioritize discharge during peak
+    let batDischargeCostMWh: number;
+    let batChargeCostMWh: number;
+
+    if (isCurrentPeak) {
+      batDischargeCostMWh = batDegradationMWh + 2500;
+      batChargeCostMWh = batDegradationMWh + 12000; // never charge in peak
+    } else if (isFuturePeakAhead) {
+      batDischargeCostMWh = batDegradationMWh + (peakFutureTariff * 1000 * etaSqrt); // preserve energy for upcoming peak
+      batChargeCostMWh = batDegradationMWh + (tariffTier === "OffPeak" ? 300 : 2500); // aggressive charging
+    } else {
+      batDischargeCostMWh = batDegradationMWh + 6800;
+      batChargeCostMWh = batDegradationMWh + 3800;
+    }
+
     const gridContractCostMWh = gridEnergyRate * 1000;
     const gridExcessCostMWh = (gridEnergyRate * 1000) + c.gridDemandChargePenaltyPerMW;
     const captiveCostMWh = tariffRates.captive * 1000;
@@ -483,7 +677,19 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     const minEnergyMWh = (batteryCapMWh * c.batteryMinSOC) / 100;
     const maxEnergyMWh = (batteryCapMWh * c.batteryMaxSOC) / 100;
 
-    const availableDischargeEnergyMWh = Math.max(0, currentEnergyMWh - minEnergyMWh);
+    // Terminal SoC trajectory coupling across intervals
+    let minRequiredEnergyAtEndOfInterval = minEnergyMWh;
+    let minRequiredChargeMW = 0;
+    if (targetTerminalSOC !== undefined && targetTerminalSOC > 0) {
+      const targetEnergyMWh = (batteryCapMWh * targetTerminalSOC) / 100;
+      const hoursRemaining = H - 1 - t;
+      const maxChargeableRemaining = hoursRemaining * c.batteryMaxChargeMW * etaSqrt;
+      minRequiredEnergyAtEndOfInterval = Math.max(minEnergyMWh, targetEnergyMWh - maxChargeableRemaining);
+      const requiredGain = Math.max(0, minRequiredEnergyAtEndOfInterval - currentEnergyMWh);
+      minRequiredChargeMW = Math.min(c.batteryMaxChargeMW, requiredGain / etaSqrt);
+    }
+
+    const availableDischargeEnergyMWh = Math.max(0, currentEnergyMWh - minRequiredEnergyAtEndOfInterval);
     const availableHeadroomEnergyMWh = Math.max(0, maxEnergyMWh - currentEnergyMWh);
 
     const maxPhysDischargeMW = Math.min(
@@ -500,16 +706,20 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     const captiveMinRamped = Math.max(c.captiveMinMW, currentCaptive - maxCaptiveRampPerHour);
     const captiveMaxRamped = Math.min(c.captiveMaxMW, currentCaptive + maxCaptiveRampPerHour);
 
-    // Physical maximum feasible capacity for interval t
+    // Physical maximum feasible capacity for interval t (strictly using ramped generator limits)
+    const maxGenPossible = currentGenCommitted
+      ? Math.min(c.generatorMaxMW, currentGenerator + maxGenRampPerHour)
+      : Math.min(c.generatorMaxMW, c.generatorMinMW + maxGenRampPerHour);
+
     const maxPossibleSupplyMW =
       Math.min(c.solarCapacityMW, solarAvail) +
       Math.min(c.windCapacityMW, windAvail) +
       maxPhysDischargeMW +
       gridMaxPhys +
       captiveMaxRamped +
-      c.generatorMaxMW;
+      maxGenPossible;
 
-    // Check physical feasibility
+    // Check physical feasibility pre-check
     if (demand > maxPossibleSupplyMW + 1e-4) {
       const deficit = Number((demand - maxPossibleSupplyMW).toFixed(2));
       unservedEnergyMWh += deficit;
@@ -547,12 +757,12 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     let chosenCommitment = false;
 
     // Branch 1: u_gen = 0 (Generator offline)
-    const b0_branch0 = demand - captiveMinRamped;
+    const b0_branch0 = demand - captiveMinRamped + minRequiredChargeMW;
     const ub_branch0 = [
       Math.min(c.solarCapacityMW, solarAvail),
       Math.min(c.windCapacityMW, windAvail),
       maxPhysDischargeMW,
-      maxPhysChargeMW,
+      Math.max(0, maxPhysChargeMW - minRequiredChargeMW),
       gridContractLimit,
       gridExcessLimit,
       Math.max(0, captiveMaxRamped - captiveMinRamped),
@@ -576,12 +786,12 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       ? Math.min(c.generatorMaxMW, currentGenerator + maxGenRampPerHour)
       : Math.min(c.generatorMaxMW, c.generatorMinMW + maxGenRampPerHour);
 
-    const b0_branch1 = demand - captiveMinRamped - genMinRamped;
+    const b0_branch1 = demand - captiveMinRamped - genMinRamped + minRequiredChargeMW;
     const ub_branch1 = [
       Math.min(c.solarCapacityMW, solarAvail),
       Math.min(c.windCapacityMW, windAvail),
       maxPhysDischargeMW,
-      maxPhysChargeMW,
+      Math.max(0, maxPhysChargeMW - minRequiredChargeMW),
       gridContractLimit,
       gridExcessLimit,
       Math.max(0, captiveMaxRamped - captiveMinRamped),
@@ -597,10 +807,11 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
           sol1.objValue +
           (captiveMinRamped * captiveCostMWh) +
           (genMinRamped * genFuelCostMWh) +
+          (minRequiredChargeMW * batChargeCostMWh) +
           startupPen;
 
         const costBranch0 = bestSolution
-          ? bestSolution.objValue + (captiveMinRamped * captiveCostMWh)
+          ? bestSolution.objValue + (captiveMinRamped * captiveCostMWh) + (minRequiredChargeMW * batChargeCostMWh)
           : Infinity;
 
         if (!bestSolution || costBranch1 < costBranch0) {
@@ -608,6 +819,20 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
           chosenCommitment = true;
         }
       }
+    }
+
+    // Check if interval LP solver found an optimal solution
+    if (!bestSolution || bestSolution.status !== "OPTIMAL") {
+      const deficit = Number(Math.max(1, demand - maxPossibleSupplyMW).toFixed(2));
+      unservedEnergyMWh += deficit;
+      deficitIntervals.push({
+        hour: t,
+        demandMW: demand,
+        maxAvailableCapacityMW: Number(maxPossibleSupplyMW.toFixed(2)),
+        deficitMW: deficit,
+      });
+      activeConstraints.push(`Hour ${t}: LP solver failed to find feasible solution`);
+      continue; // NEVER proceed with fake zero dispatch values!
     }
 
     // Interval Schedule Extraction
@@ -622,37 +847,35 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     let intervalCost = 0;
     let shadowPrice = gridEnergyRate;
 
-    if (bestSolution && bestSolution.status === "OPTIMAL") {
-      dSolar = Number(bestSolution.x[0].toFixed(2));
-      dWind = Number(bestSolution.x[1].toFixed(2));
-      dBatDis = Number(bestSolution.x[2].toFixed(2));
-      dBatCh = Number(bestSolution.x[3].toFixed(2));
-      dGridExcess = Number(bestSolution.x[5].toFixed(2));
-      dCaptive = Number((captiveMinRamped + bestSolution.x[6]).toFixed(2));
-      dGen = Number(((chosenCommitment ? genMinRamped : 0) + bestSolution.x[7]).toFixed(2));
+    dSolar = Number(bestSolution.x[0].toFixed(2));
+    dWind = Number(bestSolution.x[1].toFixed(2));
+    dBatDis = Number(bestSolution.x[2].toFixed(2));
+    dBatCh = Number((minRequiredChargeMW + bestSolution.x[3]).toFixed(2));
+    dGridExcess = Number(bestSolution.x[5].toFixed(2));
+    dCaptive = Number((captiveMinRamped + bestSolution.x[6]).toFixed(2));
+    dGen = Number(((chosenCommitment ? genMinRamped : 0) + bestSolution.x[7]).toFixed(2));
 
-      // Reconcile rounding to enforce exact power balance constraint:
-      // sum(generation) + BatDis - BatCh + Grid = demand
-      const nonContractSum = dSolar + dWind + dBatDis - dBatCh + dGridExcess + dCaptive + dGen;
-      dGridContract = Number((demand - nonContractSum).toFixed(2));
-      if (dGridContract < 0) {
-        dCaptive = Number(Math.max(c.captiveMinMW, dCaptive + dGridContract).toFixed(2));
-        dGridContract = Number(Math.max(0, demand - (dSolar + dWind + dBatDis - dBatCh + dGridExcess + dCaptive + dGen)).toFixed(2));
-      }
-
-      intervalCost =
-        dSolar * solarCostMWh +
-        dWind * windCostMWh +
-        dBatDis * batDischargeCostMWh +
-        dBatCh * batChargeCostMWh +
-        dGridContract * gridContractCostMWh +
-        dGridExcess * gridExcessCostMWh +
-        dCaptive * captiveCostMWh +
-        dGen * genFuelCostMWh +
-        (chosenCommitment && !currentGenCommitted ? c.generatorStartupCost : 0);
-
-      shadowPrice = bestSolution.shadowPrice;
+    // Reconcile rounding to enforce exact power balance constraint:
+    // sum(generation) + BatDis - BatCh + Grid = demand
+    const nonContractSum = dSolar + dWind + dBatDis - dBatCh + dGridExcess + dCaptive + dGen;
+    dGridContract = Number((demand - nonContractSum).toFixed(2));
+    if (dGridContract < 0) {
+      dCaptive = Number(Math.max(c.captiveMinMW, dCaptive + dGridContract).toFixed(2));
+      dGridContract = Number(Math.max(0, demand - (dSolar + dWind + dBatDis - dBatCh + dGridExcess + dCaptive + dGen)).toFixed(2));
     }
+
+    intervalCost =
+      dSolar * solarCostMWh +
+      dWind * windCostMWh +
+      dBatDis * batDischargeCostMWh +
+      dBatCh * batChargeCostMWh +
+      dGridContract * gridContractCostMWh +
+      dGridExcess * gridExcessCostMWh +
+      dCaptive * captiveCostMWh +
+      dGen * genFuelCostMWh +
+      (chosenCommitment && !currentGenCommitted ? c.generatorStartupCost : 0);
+
+    shadowPrice = bestSolution.shadowPrice;
 
     const dGrid = Number((dGridContract + dGridExcess).toFixed(2));
 
@@ -713,13 +936,34 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
   }
 
   const solveTimeMs = Number((performance.now() - startTime).toFixed(2));
-  const isFeasible = deficitIntervals.length === 0;
+
+  // Run Independent Constraint Verification Pass on full generated schedule
+  const verification = verifyHorizonScheduleConstraints(
+    intervals,
+    c,
+    input.initialCaptiveMW ?? 55,
+    input.initialGeneratorMW ?? 0,
+    input.initialGeneratorCommitted ?? false,
+    input.initialBatterySOC,
+    targetTerminalSOC,
+    isGridAvailable
+  );
+
+  const isFeasible = deficitIntervals.length === 0 && intervals.length === H && verification.isValid;
 
   let executionBlockedReason: string | undefined = undefined;
   if (!isFeasible) {
     const deficitHours = deficitIntervals.map((d) => `H${d.hour} (${d.deficitMW} MW)`).join(", ");
-    executionBlockedReason = `DISPATCH EXECUTION BLOCKED: Infeasible schedule. Total unserved energy deficit of ${unservedEnergyMWh.toFixed(1)} MWh detected across interval(s): ${deficitHours}. Physical interconnection and asset limits prevent meeting demand. Emergency load curtailment required before dispatch authorization.`;
-    activeConstraints.push(`Unserved energy shortfall: ${unservedEnergyMWh.toFixed(1)} MWh across ${deficitIntervals.length} interval(s)`);
+    const violationNotes = verification.violations.map((v) => `H${v.hour} ${v.constraint}: ${v.actual}`).join("; ");
+    executionBlockedReason = `DISPATCH EXECUTION BLOCKED: Infeasible schedule. ${
+      deficitIntervals.length > 0 ? `Unserved energy deficit of ${unservedEnergyMWh.toFixed(1)} MWh detected in [${deficitHours}]. ` : ""
+    }${
+      verification.violations.length > 0 ? `Physical constraint violation(s): [${violationNotes}]. ` : ""
+    }Physical limits prevent meeting demand safely. Emergency load curtailment required before dispatch authorization.`;
+    activeConstraints.push(
+      ...deficitIntervals.map((d) => `Deficit H${d.hour}: ${d.deficitMW} MW shortfall`),
+      ...verification.violations.map((v) => `Violation H${v.hour}: ${v.constraint}`)
+    );
   }
 
   return {

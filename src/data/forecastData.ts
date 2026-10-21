@@ -6,6 +6,14 @@ import {
   ModelGovernanceCard,
 } from "@/lib/forecastingModel";
 
+export const FORECAST_PROVENANCE_DECLARATION = {
+  type: "SYNTHETIC_BENCHMARK_LOAD_PROFILE" as const,
+  isMeasuredPlantData: false,
+  sourceDescription: "Synthetic Metallurgical Load Benchmark (720h Chronological Split)",
+  disclaimer:
+    "FORECAST PROVENANCE NOTICE: Predefined and model-generated load forecasts are derived from synthetic benchmark profiles. Real-world plant dispatch requires integration with on-site SCADA historians and field instrumentation.",
+} as const;
+
 export interface ForecastPoint {
   t: string; // Time label
   timestamp: string;

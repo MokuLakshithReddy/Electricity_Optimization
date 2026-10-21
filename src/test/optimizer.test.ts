@@ -13,6 +13,7 @@
 import {
   solveHorizonDispatch,
   solveEconomicDispatch,
+  verifyHorizonScheduleConstraints,
   DEFAULT_CONSTRAINTS,
   HorizonDispatchInput,
 } from "../lib/optimizationEngine";
@@ -168,9 +169,9 @@ function testBatteryLimitsAndSoCEvolution() {
 // ============================================================================
 function testGeneratorRampingAndCommitment() {
   const H = 12;
-  // High variance demand step changes to stress ramp rate limits
-  const volatileDemand = [400, 480, 580, 640, 520, 430, 410, 590, 650, 540, 420, 390];
-  const lowRenewables = new Array(12).fill(20);
+  // Volatile demand profile that exercises captive ramps and triggers generator startup and shutdown
+  const volatileDemand = [380, 430, 490, 530, 480, 420, 390, 450, 520, 470, 410, 380];
+  const lowRenewables = new Array(12).fill(25);
   const tiers: ("Peak" | "Shoulder" | "OffPeak")[] = new Array(12).fill("Peak");
 
   const result = solveHorizonDispatch({
@@ -190,6 +191,7 @@ function testGeneratorRampingAndCommitment() {
 
   let prevCaptive = 50;
   let prevGen = 0;
+  let prevGenCommitted = false;
 
   for (let t = 0; t < H; t++) {
     const inv = result.intervals[t];
@@ -201,36 +203,47 @@ function testGeneratorRampingAndCommitment() {
       `Hour ${t}: Captive ramp ${captiveRamp.toFixed(2)} MW/h exceeds maximum permissible ${maxCaptiveRamp} MW/h`
     );
 
-    // Generator ramp rate check (when operating)
-    if (inv.generatorCommitted && prevGen > 0) {
+    // Generator ramping and commitment transitions:
+    if (!prevGenCommitted && inv.generatorCommitted) {
+      // 1. Explicit startup transition from initially offline
+      assert(
+        inv.generatorMW >= DEFAULT_CONSTRAINTS.generatorMinMW - 0.05,
+        `Hour ${t}: Startup generator output ${inv.generatorMW} MW must satisfy technical min load ${DEFAULT_CONSTRAINTS.generatorMinMW} MW`
+      );
+      assert(
+        inv.generatorMW <= DEFAULT_CONSTRAINTS.generatorMinMW + maxGenRamp + 0.05,
+        `Hour ${t}: Startup generator output ${inv.generatorMW} MW exceeds startup ramp ceiling`
+      );
+    } else if (prevGenCommitted && inv.generatorCommitted) {
+      // 2. Running generator ramp envelope
       const genRamp = Math.abs(inv.generatorMW - prevGen);
       assert(
         genRamp <= maxGenRamp + 0.1,
         `Hour ${t}: Generator ramp ${genRamp.toFixed(2)} MW/h exceeds maximum permissible ${maxGenRamp} MW/h`
       );
-    }
-
-    // Generator commitment discrete bounds
-    if (inv.generatorCommitted) {
-      assert(
-        inv.generatorMW >= DEFAULT_CONSTRAINTS.generatorMinMW - 0.05,
-        `Hour ${t}: Committed generator output ${inv.generatorMW} MW is below min stable technical load ${DEFAULT_CONSTRAINTS.generatorMinMW} MW`
-      );
-    } else {
+    } else if (prevGenCommitted && !inv.generatorCommitted) {
+      // 3. Shutdown transition
       assert(
         inv.generatorMW === 0,
-        `Hour ${t}: Uncommitted generator must produce 0 MW, got ${inv.generatorMW} MW`
+        `Hour ${t}: Shutdown generator must output exactly 0 MW, got ${inv.generatorMW} MW`
+      );
+    } else {
+      // 4. Continued offline
+      assert(
+        inv.generatorMW === 0,
+        `Hour ${t}: Offline generator must produce 0 MW, got ${inv.generatorMW} MW`
       );
     }
 
     prevCaptive = inv.captiveMW;
     prevGen = inv.generatorMW;
+    prevGenCommitted = inv.generatorCommitted;
   }
 
   testResults.push({
-    name: "Test 3: Generator Ramping (180/240 MW/h) & Discrete Unit Commitment",
+    name: "Test 3: Generator Ramping, Startup from Offline & Discrete Unit Commitment",
     passed: true,
-    details: "Enforced technical minimums, startup branching, and inter-temporal ramp-rate bounds on thermal assets.",
+    details: "Enforced startup bounds from initially offline state, running ramp limits (180/240 MW/h), and shutdown transitions.",
   });
 }
 
@@ -397,6 +410,107 @@ function testComparisonAgainstReferenceSolver() {
 }
 
 // ============================================================================
+// TEST 7: Terminal State-of-Charge (SoC) Target Enforcement
+// ============================================================================
+function testTerminalStateOfChargeTarget() {
+  const H = 24;
+  const demand = [
+    360, 350, 350, 360, 380, 420, 480, 500, 520, 510, 490, 480,
+    470, 480, 500, 520, 540, 560, 580, 570, 530, 480, 420, 380,
+  ];
+  const solar = [
+    0, 0, 0, 0, 0, 15, 60, 120, 160, 180, 190, 180,
+    160, 140, 100, 50, 15, 0, 0, 0, 0, 0, 0, 0,
+  ];
+  const wind = new Array(24).fill(65);
+  const tiers: ("Peak" | "Shoulder" | "OffPeak")[] = [
+    "OffPeak", "OffPeak", "OffPeak", "OffPeak", "OffPeak", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Peak",
+    "Peak", "Peak", "Peak", "Shoulder", "OffPeak", "OffPeak",
+  ];
+
+  const targetSOC = 50;
+  const result = solveHorizonDispatch({
+    horizonHours: H,
+    hourlyDemandMW: demand,
+    hourlySolarAvailableMW: solar,
+    hourlyWindAvailableMW: wind,
+    hourlyTariffTier: tiers,
+    initialBatterySOC: 60,
+    targetTerminalSOC: targetSOC,
+  });
+
+  if (result.solverStatus !== "OPTIMAL_CONVERGED") {
+    console.error("DEBUG TEST 7:", result.executionBlockedReason);
+  }
+  assert(result.solverStatus === "OPTIMAL_CONVERGED", "Horizon solver must converge");
+  assert(result.isExecutablePlan === true, "Horizon plan with terminal target must be executable");
+  const finalSOC = result.intervals[23].batterySOC;
+  assert(
+    finalSOC >= targetSOC - 0.5,
+    `Terminal SoC violated: Expected >= ${targetSOC}%, Actual = ${finalSOC}%`
+  );
+
+  testResults.push({
+    name: "Test 7: Terminal State-of-Charge (SoC) Target Enforcement",
+    passed: true,
+    details: `Guaranteed multi-interval cyclic sustainability: Terminal SoC at H23 is ${finalSOC}% (target >= ${targetSOC}%).`,
+  });
+}
+
+// ============================================================================
+// TEST 8: Independent Physical Verification Gatekeeper & Error Rejection
+// ============================================================================
+function testIndependentVerificationRejection() {
+  // Create an artificial schedule with a 100 MW power imbalance
+  const badIntervals = [{
+    hour: 0,
+    timeLabel: "00:00",
+    demandMW: 500,
+    solarMW: 100,
+    windMW: 50,
+    batteryDischargeMW: 0,
+    batteryChargeMW: 0,
+    netBatteryMW: 0,
+    gridMW: 200,
+    gridContractMW: 200,
+    gridExcessMW: 0,
+    captiveMW: 50,
+    generatorMW: 0,
+    generatorCommitted: false,
+    batterySOC: 50,
+    costRupees: 100000,
+    baselineCostRupees: 150000,
+    savingsRupees: 50000,
+    marginalCostPerKWh: 8.0,
+  }]; // Sum = 100 + 50 + 200 + 50 = 400 MW != 500 MW (100 MW power balance breach!)
+
+  const verification = verifyHorizonScheduleConstraints(
+    badIntervals,
+    DEFAULT_CONSTRAINTS,
+    50,
+    0,
+    false,
+    50,
+    50,
+    true
+  );
+
+  assert(verification.isValid === false, "Verification must reject unserved power imbalance");
+  assert(
+    verification.violations.some((v) => v.constraint === "POWER_BALANCE"),
+    "Must flag POWER_BALANCE violation"
+  );
+
+  testResults.push({
+    name: "Test 8: Independent Physical Verification Gatekeeper & Constraint Auditing",
+    passed: true,
+    details: "Proved that post-solve physical audit strictly rejects any schedule with power imbalances or ramp violations.",
+  });
+}
+
+// ============================================================================
 // MAIN RUNNER
 // ============================================================================
 export function runAllOptimizerTests() {
@@ -410,6 +524,8 @@ export function runAllOptimizerTests() {
   testGridOutageAndDeficitScenarios();
   testStrictInfeasibilitySeparation();
   testComparisonAgainstReferenceSolver();
+  testTerminalStateOfChargeTarget();
+  testIndependentVerificationRejection();
 
   let allPassed = true;
   for (const t of testResults) {

@@ -82,6 +82,22 @@ function DashboardContent() {
 
   return (
     <div className="space-y-6 pb-12 min-w-0 overflow-x-hidden">
+      {/* 0. DATA PROVENANCE DEMARCATION BANNER */}
+      <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+          <span className="font-bold text-amber-900 uppercase tracking-wider text-[11px]">
+            Data Provenance: Digital Twin Simulation Sandbox
+          </span>
+          <span className="text-amber-800 hidden md:inline">
+            All plant metrics, power values, and cost savings are generated from synthetic simulation models. They are NOT live physical plant measurements or certified financial savings.
+          </span>
+        </div>
+        <span className="bg-amber-200/90 text-amber-950 font-mono font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-amber-300">
+          SIMULATED BENCHMARK DATA
+        </span>
+      </div>
+
       {/* 1. Large Hero / Header Section */}
       <HeroHeader
         selectedPlant={selectedPlant}
