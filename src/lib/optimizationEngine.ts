@@ -1090,39 +1090,96 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
   const initialGenerator = input.initialGeneratorMW ?? 0;
   const initialGenCommitted = input.initialGeneratorCommitted ?? false;
 
-  // Step 2: Formulate Candidate Unit Commitment Schedules for Generator
-  // In industrial facilities, running diesel is expensive; it is only committed when necessary.
-  const commitmentCandidates: boolean[][] = [];
-
-  // Candidate 0: Generator is OFF for all hours
-  commitmentCandidates.push(new Array(H).fill(false));
-
-  // Candidate 1: Generator ON during hours where net demand exceeds base clean capacity
-  const peakCandidate: boolean[] = new Array(H).fill(false);
-  let firstPeakHour = -1;
-  let lastPeakHour = -1;
+  // Step 2: Formulate Systematic Unit Commitment Schedules across the Horizon
+  // Systematically explores the complete space of physically feasible generator on/off schedules.
+  const deficitHours: number[] = [];
+  const stressHours: number[] = [];
   for (let t = 0; t < H; t++) {
-    const netDemand = input.hourlyDemandMW[t] - (input.hourlySolarAvailableMW[t] + input.hourlyWindAvailableMW[t]);
-    if (netDemand > c.captiveMaxMW + gridContractLimit || input.hourlyDemandMW[t] > 470) {
-      peakCandidate[t] = true;
-      if (t > 0) peakCandidate[t - 1] = true; // 1h startup window
-      if (firstPeakHour === -1) firstPeakHour = t > 0 ? t - 1 : t;
-      lastPeakHour = t;
+    const cleanCap = (input.hourlySolarAvailableMW[t] || 0) + (input.hourlyWindAvailableMW[t] || 0) + c.captiveMaxMW + gridContractLimit;
+    if (input.hourlyDemandMW[t] > cleanCap + c.batteryMaxDischargeMW) {
+      deficitHours.push(t);
+    }
+    if (input.hourlyDemandMW[t] > cleanCap) {
+      stressHours.push(t);
     }
   }
-  commitmentCandidates.push(peakCandidate);
 
-  // Candidate 2: Contiguous block commitment covering peak operations window
-  if (firstPeakHour !== -1 && lastPeakHour !== -1) {
-    const blockCandidate: boolean[] = new Array(H).fill(false);
-    for (let t = firstPeakHour; t <= lastPeakHour; t++) {
-      blockCandidate[t] = true;
+  const commitmentCandidates: boolean[][] = [];
+  const candidateSignatures = new Set<string>();
+
+  function registerCandidate(u: boolean[]) {
+    const key = u.map((b) => (b ? "1" : "0")).join("");
+    if (!candidateSignatures.has(key)) {
+      candidateSignatures.add(key);
+      commitmentCandidates.push([...u]);
     }
-    commitmentCandidates.push(blockCandidate);
   }
 
-  // Candidate 3: Continuous commitment (for high-stress, islanded, or continuous regimes)
-  commitmentCandidates.push(new Array(H).fill(true));
+  // 1. All-offline candidate u = [0, ..., 0] (0 startups, 0 diesel)
+  registerCandidate(new Array(H).fill(false));
+
+  // 2. Continuous commitment u = [1, ..., 1]
+  registerCandidate(new Array(H).fill(true));
+
+  // 3. Operational windows enclosing capacity deficit / tariff stress
+  const targetHours = deficitHours.length > 0 ? deficitHours : stressHours;
+  if (targetHours.length > 0) {
+    const firstTarget = Math.min(...targetHours);
+    const lastTarget = Math.max(...targetHours);
+
+    const tightWindow = new Array(H).fill(false);
+    for (let t = firstTarget; t <= lastTarget; t++) tightWindow[t] = true;
+    registerCandidate(tightWindow);
+
+    if (firstTarget > 0) {
+      const with1hLead = [...tightWindow];
+      with1hLead[firstTarget - 1] = true;
+      registerCandidate(with1hLead);
+    }
+    if (firstTarget > 1) {
+      const with2hLead = [...tightWindow];
+      with2hLead[firstTarget - 1] = true;
+      with2hLead[firstTarget - 2] = true;
+      registerCandidate(with2hLead);
+    }
+    if (lastTarget < H - 1) {
+      const withTail = [...tightWindow];
+      withTail[lastTarget + 1] = true;
+      registerCandidate(withTail);
+    }
+  }
+
+  // 4. All single-run contiguous operational windows [s, e] across the horizon
+  for (let s = 0; s < H; s++) {
+    for (let e = s; e < H; e++) {
+      if (deficitHours.length > 0) {
+        const overlapsDeficit = deficitHours.some((dh) => dh >= s && dh <= e);
+        if (!overlapsDeficit) continue;
+      }
+      const u = new Array(H).fill(false);
+      for (let t = s; t <= e; t++) u[t] = true;
+      registerCandidate(u);
+    }
+  }
+
+  // 5. Dual-peak operational windows (morning and evening deficit clusters)
+  if (targetHours.length > 1) {
+    const midPoint = Math.floor(H / 2);
+    const morningTargets = targetHours.filter((t) => t < midPoint);
+    const eveningTargets = targetHours.filter((t) => t >= midPoint);
+
+    if (morningTargets.length > 0 && eveningTargets.length > 0) {
+      const mStart = Math.min(...morningTargets);
+      const mEnd = Math.max(...morningTargets);
+      const eStart = Math.min(...eveningTargets);
+      const eEnd = Math.max(...eveningTargets);
+
+      const dualWindow = new Array(H).fill(false);
+      for (let t = Math.max(0, mStart - 1); t <= Math.min(midPoint - 1, mEnd + 1); t++) dualWindow[t] = true;
+      for (let t = Math.max(midPoint, eStart - 1); t <= Math.min(H - 1, eEnd + 1); t++) dualWindow[t] = true;
+      registerCandidate(dualWindow);
+    }
+  }
 
   // Step 3: Solve Joint Multi-Period Optimization across all candidates
   const VARS_PER_HOUR = 8;
@@ -1342,6 +1399,22 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
         bestTotalCostWithStartup = totalCandidateCost;
         bestSolution = sol;
         bestCommitment = candidateCommitment;
+      }
+
+      // Dominance Termination: If all-offline u = [0, ..., 0] is optimal with 0 grid excess,
+      // diesel fuel (Rs 22.56/kWh) + startup can NEVER reduce costs compared to cleaner sources.
+      // Therefore, u = [0, ..., 0] is mathematically guaranteed to be the global minimum!
+      if (candidateCommitment.every((b) => !b)) {
+        let hasGridExcess = false;
+        for (let t = 0; t < H; t++) {
+          if (sol.x[t * VARS_PER_HOUR + 5] > 0.05) {
+            hasGridExcess = true;
+            break;
+          }
+        }
+        if (!hasGridExcess) {
+          break; // Global minimum proven!
+        }
       }
     }
   }

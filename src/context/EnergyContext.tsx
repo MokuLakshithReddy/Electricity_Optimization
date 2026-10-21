@@ -97,7 +97,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       (Math.min(100, (renewableMW / Math.max(1, demandMW)) * 100)).toFixed(1)
     );
 
-    // True verified savings from the mathematical optimization solver
+    // Modeled savings calculated by the mathematical optimization solver against reference baseline
     const hourlySavings = optimizationResult.hourlySavings;
     const energyCostSavedDaily = optimizationResult.dailySavingsEstimate;
     const lakhs = (energyCostSavedDaily / 100000).toFixed(1);

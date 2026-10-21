@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { Download, FileText, Leaf, IndianRupee, Zap, CheckCircle, ShieldCheck, FileSpreadsheet } from "lucide-react";
+import { Download, FileText, Leaf, IndianRupee, Zap, CheckCircle, ShieldCheck, FileSpreadsheet, AlertTriangle, Info } from "lucide-react";
 import { toast } from "sonner";
 import { queryLedgerReport, exportLedgerToCsv, buildHistoricalLedger, verifyLedgerCryptographicIntegrity } from "@/lib/energyLedger";
 import {
@@ -129,7 +129,7 @@ export function ReportsPage() {
             <div class="card"><label>Energy Consumed</label><val>${reportMetrics.consumed} ${reportMetrics.consumedUnit}</val></div>
             <div class="card"><label>Electricity Cost</label><val>${reportMetrics.cost}</val></div>
             <div class="card"><label>Carbon Emissions</label><val>${reportMetrics.emissions} ${reportMetrics.emissionsUnit}</val></div>
-            <div class="card"><label>Verified Savings</label><val>${reportMetrics.savings}</val></div>
+            <div class="card"><label>Modeled Savings</label><val>${reportMetrics.savings}</val></div>
           </div>
 
           <div class="grid">
@@ -137,6 +137,10 @@ export function ReportsPage() {
             <div class="card"><label>Power Reliability</label><val>${reportMetrics.reliability}</val></div>
             <div class="card"><label>Grid Dependency</label><val>${reportMetrics.gridPct}</val></div>
             <div class="card"><label>Battery Utilization</label><val>${reportMetrics.bessPct}</val></div>
+          </div>
+
+          <div style="margin-top: 14px; padding: 10px 14px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; font-size: 11px; color: #92400E;">
+            <strong>M&V Demarcation Notice:</strong> Savings figures reflect modeled optimization against operating baseline. Field-verified savings require post-commissioning IPMVP Option C utility billing reconciliation.
           </div>
 
           <h3>Ledger Breakdown</h3>
@@ -148,7 +152,7 @@ export function ReportsPage() {
                 <th>Landed Cost</th>
                 <th>CO₂ Emissions</th>
                 <th>Renewable %</th>
-                <th>Savings</th>
+                <th>Modeled Savings</th>
               </tr>
             </thead>
             <tbody>
@@ -242,6 +246,19 @@ export function ReportsPage() {
         </div>
       </div>
 
+      {/* Measurement & Verification Demarcation Notice */}
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-950 flex items-start gap-3 shadow-2xs">
+        <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="font-bold">
+            Measurement & Verification (M&V) Protocol Notice (IPMVP Option C Demarcation)
+          </p>
+          <p className="text-amber-900 leading-relaxed">
+            All cost variances and savings reported below are modeled optimization figures calculated against the facility operating reference baseline. Simulated savings must not be presented as revenue-grade verified results until post-commissioning submeter calibration and utility tariff settlement are formally validated.
+          </p>
+        </div>
+      </div>
+
       {/* 4 Key Metrics Cards (Updated dynamically by period selection) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
@@ -315,11 +332,11 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Card 4: Verified Savings */}
+        {/* Card 4: Modeled Savings (Simulation) */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
-              Verified Savings
+              Modeled Savings
             </span>
             <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#E8F5E9] text-[#1B4D3E]">
               <FileText className="h-4 w-4" />
@@ -330,8 +347,8 @@ export function ReportsPage() {
               {reportMetrics.savings}
             </span>
             <p className="text-xs text-[#1B4D3E] font-medium mt-1 flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5 text-[#1B4D3E]" />
-              <span>AI Optimization verified</span>
+              <Info className="h-3.5 w-3.5 text-[#1B4D3E]" />
+              <span>Modeled vs. Baseline (Pre-M&V)</span>
             </p>
           </div>
         </div>
@@ -460,7 +477,7 @@ export function ReportsPage() {
               <th className="pb-3">Landed Cost</th>
               <th className="pb-3">CO₂ Emissions</th>
               <th className="pb-3">Renewable %</th>
-              <th className="pb-3">Verified Savings</th>
+              <th className="pb-3">Modeled Savings (Simulated)</th>
               <th className="pb-3 text-right">Block Hash (SHA-256)</th>
             </tr>
           </thead>

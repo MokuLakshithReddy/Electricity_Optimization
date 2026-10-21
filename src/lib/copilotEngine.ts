@@ -134,7 +134,7 @@ export function analyzeCopilotQuery(
     const confidence = calculateCalibratedConfidence(telemetry, 25);
 
     let explanation = `### Real-Time Cost Driver Analysis\n\n`;
-    explanation += `Current total operating cost is **₹${opt.totalCostPerHour.toLocaleString("en-IN")}/hr** against a baseline of **₹${opt.baselineCostPerHour.toLocaleString("en-IN")}/hr** (verified savings: **₹${opt.hourlySavings.toLocaleString("en-IN")}/hr**).\n\n`;
+    explanation += `Current total operating cost is **₹${opt.totalCostPerHour.toLocaleString("en-IN")}/hr** against a baseline of **₹${opt.baselineCostPerHour.toLocaleString("en-IN")}/hr** (modeled savings: **₹${opt.hourlySavings.toLocaleString("en-IN")}/hr** against reference baseline).\n\n`;
     explanation += `**Primary Cost Drivers Identified:**\n`;
     if (isGridPeak) {
       explanation += `1. **Time-of-Day Tariff Exposure**: You are importing **${telemetry.gridMW} MW** from the grid during the **${telemetry.tariffTier} window** at **₹${gridRate}/kWh**.\n`;

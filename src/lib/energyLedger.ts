@@ -43,9 +43,12 @@ export interface EnergyLedgerRecord {
   dieselMWh: number;
   baselineCostRupees: number;
   optimizedCostRupees: number;
-  simulatedSavingsRupees: number; // Signed simulated cost variance (baseCost - optCost); preserves negative off-peak investment
-  /** @deprecated Retained for backwards compatibility with legacy UI consumers. Reflects simulatedSavingsRupees. */
+  modeledSavingsRupees: number; // Signed modeled cost variance (baseCost - optCost) calculated by optimization model against baseline
+  simulatedSavingsRupees: number; // Signed simulated cost variance; preserves negative off-peak investment
+  /** @deprecated Unverified prior to IPMVP Option C revenue meter reconciliation. Use modeledSavingsRupees. */
   verifiedSavingsRupees: number;
+  isRevenueMeterVerified: false; // False in pre-commissioning; true only after utility billing & revenue submeter reconciliation
+  measurementAndVerificationStatus: "PRE_COMMISSIONING_SIMULATION";
   co2EmissionsTonnes: number;
   baselineCO2Tonnes: number;
   co2AvoidedTonnes: number;
@@ -64,7 +67,10 @@ export interface AggregatedReport {
   totalConsumedMWh: string;
   totalCostFormatted: string;
   totalEmissionsFormatted: string;
-  totalSavingsFormatted: string;
+  totalSavingsFormatted: string; // Formatted modeled savings
+  totalModeledSavingsFormatted: string;
+  isFieldVerified: boolean;
+  mvProtocolNotice: string;
   avgRenewablePct: string;
   avgReliability: string;
   gridSharePct: string;
@@ -257,8 +263,11 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       dieselMWh,
       baselineCostRupees: Math.round(baseCost),
       optimizedCostRupees: Math.round(optCost),
+      modeledSavingsRupees: savings,
       simulatedSavingsRupees: savings,
       verifiedSavingsRupees: savings,
+      isRevenueMeterVerified: false,
+      measurementAndVerificationStatus: "PRE_COMMISSIONING_SIMULATION",
       co2EmissionsTonnes: Number(optCO2.toFixed(1)),
       baselineCO2Tonnes: Number(baseCO2.toFixed(1)),
       co2AvoidedTonnes: Number(co2Avoided.toFixed(1)),
@@ -276,6 +285,9 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
 }
 
 export const HISTORICAL_ENERGY_LEDGER = buildHistoricalLedger();
+
+const MV_PROTOCOL_NOTICE =
+  "All cost and emissions savings displayed are modeled results calculated by the joint optimization engine against the plant's operating reference baseline. Field-verified savings require post-commissioning revenue submeter telemetry reconciliation and utility tariff billing settlement per IPMVP Option C standards.";
 
 /**
  * Computes dynamic aggregated energy audit reports for Daily, Weekly, and Monthly periods.
@@ -298,7 +310,7 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
     for (const r of slice) {
       totalDemand += r.demandMWh;
       totalOptCost += r.optimizedCostRupees;
-      totalSavings += r.verifiedSavingsRupees;
+      totalSavings += r.modeledSavingsRupees;
       totalCO2 += r.co2EmissionsTonnes;
       totalSolar += r.solarMWh;
       totalWind += r.windMWh;
@@ -322,7 +334,7 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
         (shiftSlice.reduce((a, b) => a + b.solarMWh + b.windMWh, 0) / Math.max(1, shiftEnergy)) *
         100
       ).toFixed(1);
-      const shiftSavLakhs = (shiftSlice.reduce((a, b) => a + b.verifiedSavingsRupees, 0) / 100000).toFixed(1);
+      const shiftSavLakhs = (shiftSlice.reduce((a, b) => a + b.modeledSavingsRupees, 0) / 100000).toFixed(1);
 
       return {
         period: sh,
@@ -330,7 +342,7 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
         cost: `₹${shiftCostLakhs} L`,
         co2: `${shiftCO2}`,
         renewable: `${shiftRen}%`,
-        savings: `₹${shiftSavLakhs} L`,
+        savings: `₹${shiftSavLakhs} L (Modeled)`,
         hashShort: shiftSlice[0]?.blockHashSha256.slice(0, 10) || "—",
       };
     });
@@ -355,11 +367,14 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
 
     return {
       period: "Daily",
-      title: "Daily Energy Ledger & ESG Verification Report",
+      title: "Daily Energy Ledger & Modeled ESG Performance Report",
       totalConsumedMWh: `${Math.round(totalDemand).toLocaleString("en-IN")}`,
       totalCostFormatted: `₹${(totalOptCost / 100000).toFixed(1)} L`,
       totalEmissionsFormatted: `${Math.round(totalCO2)}`,
       totalSavingsFormatted: `₹${(totalSavings / 100000).toFixed(1)} L`,
+      totalModeledSavingsFormatted: `₹${(totalSavings / 100000).toFixed(1)} L (Modeled)`,
+      isFieldVerified: false,
+      mvProtocolNotice: MV_PROTOCOL_NOTICE,
       avgRenewablePct: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`,
       avgReliability: "99.97%",
       gridSharePct: `${((totalGrid / totalDemand) * 100).toFixed(1)}%`,
@@ -385,7 +400,7 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
     for (const r of slice) {
       totalDemand += r.demandMWh;
       totalOptCost += r.optimizedCostRupees;
-      totalSavings += r.verifiedSavingsRupees;
+      totalSavings += r.modeledSavingsRupees;
       totalCO2 += r.co2EmissionsTonnes;
       totalSolar += r.solarMWh;
       totalWind += r.windMWh;
@@ -409,26 +424,29 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
     const costTrendData = days.map((d, idx) => {
       const daySlice = slice.slice(idx * 24, (idx + 1) * 24);
       const costCr = Number(((daySlice.reduce((a, b) => a + b.optimizedCostRupees, 0)) / 1e7).toFixed(2));
-      const savCr = Number(((daySlice.reduce((a, b) => a + b.verifiedSavingsRupees, 0)) / 1e7).toFixed(2));
+      const savCr = Number(((daySlice.reduce((a, b) => a + b.modeledSavingsRupees, 0)) / 1e7).toFixed(2));
       return { t: d, cost: costCr, savings: savCr };
     });
 
     // Trailing 5 calendar weeks
     const ledgerRows = [
-      { period: "Week 31 (28 Jul - 03 Aug)", energy: "11,200", cost: "₹7.60 Cr", co2: "4,280", renewable: "31.2%", savings: "₹1.12 Cr", hashShort: "9f82b71a04" },
-      { period: "Week 32 (04 Aug - 10 Aug)", energy: "11,380", cost: "₹7.69 Cr", co2: "4,322", renewable: "32.1%", savings: "₹1.16 Cr", hashShort: "8b17c93e11" },
-      { period: "Week 33 (11 Aug - 17 Aug)", energy: "11,560", cost: "₹7.78 Cr", co2: "4,364", renewable: "33.0%", savings: "₹1.20 Cr", hashShort: "6c29d01f92" },
-      { period: "Week 34 (18 Aug - 24 Aug)", energy: "11,740", cost: "₹7.87 Cr", co2: "4,406", renewable: "33.9%", savings: "₹1.24 Cr", hashShort: "3e55a821bc" },
-      { period: "Week 35 (25 Aug - 31 Aug)", energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`, cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`, co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`, renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`, savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr`, hashShort: slice[slice.length - 1]?.blockHashSha256.slice(0, 10) || "—" },
+      { period: "Week 31 (28 Jul - 03 Aug)", energy: "11,200", cost: "₹7.60 Cr", co2: "4,280", renewable: "31.2%", savings: "₹1.12 Cr (Modeled)", hashShort: "9f82b71a04" },
+      { period: "Week 32 (04 Aug - 10 Aug)", energy: "11,380", cost: "₹7.69 Cr", co2: "4,322", renewable: "32.1%", savings: "₹1.16 Cr (Modeled)", hashShort: "8b17c93e11" },
+      { period: "Week 33 (11 Aug - 17 Aug)", energy: "11,560", cost: "₹7.78 Cr", co2: "4,364", renewable: "33.0%", savings: "₹1.20 Cr (Modeled)", hashShort: "6c29d01f92" },
+      { period: "Week 34 (18 Aug - 24 Aug)", energy: "11,740", cost: "₹7.87 Cr", co2: "4,406", renewable: "33.9%", savings: "₹1.24 Cr (Modeled)", hashShort: "3e55a821bc" },
+      { period: "Week 35 (25 Aug - 31 Aug)", energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`, cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`, co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`, renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`, savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`, hashShort: slice[slice.length - 1]?.blockHashSha256.slice(0, 10) || "—" },
     ];
 
     return {
       period: "Weekly",
-      title: "Weekly Industrial Energy & ESG Audit Report",
+      title: "Weekly Industrial Energy & Modeled ESG Performance Report",
       totalConsumedMWh: `${Math.round(totalDemand).toLocaleString("en-IN")}`,
       totalCostFormatted: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`,
       totalEmissionsFormatted: `${Math.round(totalCO2).toLocaleString("en-IN")}`,
       totalSavingsFormatted: `₹${(totalSavings / 1e7).toFixed(2)} Cr`,
+      totalModeledSavingsFormatted: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`,
+      isFieldVerified: false,
+      mvProtocolNotice: MV_PROTOCOL_NOTICE,
       avgRenewablePct: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`,
       avgReliability: "99.95%",
       gridSharePct: `${((totalGrid / totalDemand) * 100).toFixed(1)}%`,
@@ -452,7 +470,7 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
   for (const r of ledger) {
     totalDemand += r.demandMWh;
     totalOptCost += r.optimizedCostRupees;
-    totalSavings += r.verifiedSavingsRupees;
+    totalSavings += r.modeledSavingsRupees;
     totalCO2 += r.co2EmissionsTonnes;
     totalSolar += r.solarMWh;
     totalWind += r.windMWh;
@@ -476,24 +494,27 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
   const costTrendData = weeks.map((w, idx) => {
     const weekSlice = ledger.slice(idx * 168, (idx + 1) * 168);
     const costCr = Number(((weekSlice.reduce((a, b) => a + b.optimizedCostRupees, 0)) / 1e7).toFixed(2));
-    const savCr = Number(((weekSlice.reduce((a, b) => a + b.verifiedSavingsRupees, 0)) / 1e7).toFixed(2));
+    const savCr = Number(((weekSlice.reduce((a, b) => a + b.modeledSavingsRupees, 0)) / 1e7).toFixed(2));
     return { t: w, cost: costCr, savings: savCr };
   });
 
   const ledgerRows = [
-    { period: "May 2026", energy: "48,200", cost: "₹31.4 Cr", co2: "18,200", renewable: "34.1%", savings: "₹4.8 Cr", hashShort: "5a19c72e01" },
-    { period: "Jun 2026", energy: "49,100", cost: "₹32.1 Cr", co2: "18,650", renewable: "35.2%", savings: "₹5.1 Cr", hashShort: "7f28d91b44" },
-    { period: "Jul 2026", energy: "49,800", cost: "₹32.8 Cr", co2: "18,900", renewable: "36.0%", savings: "₹5.3 Cr", hashShort: "1b93f88c32" },
-    { period: "Aug 2026", energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`, cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`, co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`, renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`, savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr`, hashShort: ledger[ledger.length - 1]?.blockHashSha256.slice(0, 10) || "—" },
+    { period: "May 2026", energy: "48,200", cost: "₹31.4 Cr", co2: "18,200", renewable: "34.1%", savings: "₹4.8 Cr (Modeled)", hashShort: "5a19c72e01" },
+    { period: "Jun 2026", energy: "49,100", cost: "₹32.1 Cr", co2: "18,650", renewable: "35.2%", savings: "₹5.1 Cr (Modeled)", hashShort: "7f28d91b44" },
+    { period: "Jul 2026", energy: "49,800", cost: "₹32.8 Cr", co2: "18,900", renewable: "36.0%", savings: "₹5.3 Cr (Modeled)", hashShort: "1b93f88c32" },
+    { period: "Aug 2026", energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`, cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`, co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`, renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`, savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`, hashShort: ledger[ledger.length - 1]?.blockHashSha256.slice(0, 10) || "—" },
   ];
 
   return {
     period: "Monthly",
-    title: "Monthly Enterprise Carbon & Energy Audit Report",
+    title: "Monthly Enterprise Carbon & Modeled Energy Performance Report",
     totalConsumedMWh: `${Math.round(totalDemand).toLocaleString("en-IN")}`,
     totalCostFormatted: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`,
     totalEmissionsFormatted: `${Math.round(totalCO2).toLocaleString("en-IN")}`,
     totalSavingsFormatted: `₹${(totalSavings / 1e7).toFixed(2)} Cr`,
+    totalModeledSavingsFormatted: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`,
+    isFieldVerified: false,
+    mvProtocolNotice: MV_PROTOCOL_NOTICE,
     avgRenewablePct: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`,
     avgReliability: "99.96%",
     gridSharePct: `${((totalGrid / totalDemand) * 100).toFixed(1)}%`,
