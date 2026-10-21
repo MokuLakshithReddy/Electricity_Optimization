@@ -643,3 +643,162 @@ export class ScadaWatchdogMonitor {
 }
 
 export const scadaWatchdog = new ScadaWatchdogMonitor();
+
+// ============================================================================
+// INDUSTRIAL COMMISSIONING SAFETY GATE & PHYSICAL ACTUATION CONTROLLER
+// ============================================================================
+
+export interface EngineeringSignoff {
+  milestoneId: string;
+  engineerName: string;
+  professionalLicenseId: string;
+  certifyingAuthority: string;
+  timestampISO: string;
+  digitalSignatureSha256: string;
+  certificateFingerprint: string;
+}
+
+export class IndustrialSafetyCommissioningGate {
+  private milestones: Map<string, SiteValidationMilestone> = new Map();
+  private signoffs: Map<string, EngineeringSignoff> = new Map();
+
+  constructor() {
+    for (const m of SITE_SAFETY_VALIDATION.checklist) {
+      this.milestones.set(m.id, { ...m });
+    }
+  }
+
+  public recordEngineeringSignoff(
+    milestoneId: string,
+    engineerName: string,
+    professionalLicenseId: string,
+    certifyingAuthority: string,
+    certificateSecret: string,
+  ): { success: boolean; signature: string } {
+    if (!this.milestones.has(milestoneId)) {
+      throw new Error(`Invalid milestone ID: ${milestoneId}`);
+    }
+
+    const timestampISO = new Date().toISOString();
+    const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${timestampISO}|${certificateSecret}`;
+    const digitalSignatureSha256 = sha256(signaturePayload);
+    const certificateFingerprint = sha256(
+      `FINGERPRINT:${professionalLicenseId}:${certifyingAuthority}`,
+    );
+
+    const signoff: EngineeringSignoff = {
+      milestoneId,
+      engineerName,
+      professionalLicenseId,
+      certifyingAuthority,
+      timestampISO,
+      digitalSignatureSha256,
+      certificateFingerprint,
+    };
+
+    this.signoffs.set(milestoneId, signoff);
+    return { success: true, signature: digitalSignatureSha256 };
+  }
+
+  public getSignedCount(): number {
+    return this.signoffs.size;
+  }
+
+  public getTotalMilestonesCount(): number {
+    return this.milestones.size;
+  }
+
+  public isCommissioningComplete(): boolean {
+    return this.signoffs.size === this.milestones.size && this.milestones.size > 0;
+  }
+
+  public getSignoff(milestoneId: string): EngineeringSignoff | undefined {
+    return this.signoffs.get(milestoneId);
+  }
+
+  public clearSignoffs(): void {
+    this.signoffs.clear();
+  }
+}
+
+export const industrialCommissioningGate = new IndustrialSafetyCommissioningGate();
+
+export interface ActuationRequest {
+  equipmentId: string;
+  equipmentType: "BESS_INVERTER" | "CAPTIVE_GOVERNOR" | "DIESEL_GENSET" | "GRID_BREAKER_132KV";
+  targetSetpointMW: number;
+  operatorId: string;
+  interlockPermissiveKeysEngaged?: boolean;
+}
+
+export interface ActuationResult {
+  accepted: boolean;
+  blockedReason?: string | undefined;
+  executionMode: "PHYSICAL_ACTUATION_LOCKED" | "SIMULATION_TWIN_ONLY" | "AUTHORIZED_COMMISSIONED";
+  auditHash: string;
+}
+
+export class IndustrialActuationController {
+  private isCastellKeyPermissiveEngaged: boolean = false;
+
+  public setCastellKeyPermissive(engaged: boolean): void {
+    this.isCastellKeyPermissiveEngaged = engaged;
+  }
+
+  public requestActuation(request: ActuationRequest): ActuationResult {
+    const timestamp = new Date().toISOString();
+    const auditPayload = `ACTUATION_REQ|${request.equipmentId}|${request.targetSetpointMW}|${request.operatorId}|${timestamp}`;
+    const auditHash = sha256(auditPayload);
+
+    // Rule 1: Equipment actuation must remain disabled by default in simulation / pre-commissioning
+    if (!SITE_SAFETY_VALIDATION.isPhysicalActuationPermitted) {
+      return {
+        accepted: false,
+        blockedReason:
+          "PHYSICAL ACTUATION PROHIBITED: Closed-loop hardware actuation is permanently locked in simulation mode. Plant engineering has not certified site commissioning milestones (VAL-TEL-01 to VAL-COM-05).",
+        executionMode: "PHYSICAL_ACTUATION_LOCKED",
+        auditHash,
+      };
+    }
+
+    // Rule 2: All 6 commissioning milestones must be cryptographically signed
+    if (!industrialCommissioningGate.isCommissioningComplete()) {
+      return {
+        accepted: false,
+        blockedReason: `COMMISSIONING INCOMPLETE: Only ${industrialCommissioningGate.getSignedCount()}/${industrialCommissioningGate.getTotalMilestonesCount()} site validation milestones signed off.`,
+        executionMode: "PHYSICAL_ACTUATION_LOCKED",
+        auditHash,
+      };
+    }
+
+    // Rule 3: Hardwired trapped-key (Castell) permissive must be engaged
+    if (!this.isCastellKeyPermissiveEngaged && !request.interlockPermissiveKeysEngaged) {
+      return {
+        accepted: false,
+        blockedReason:
+          "HARDWIRED PERMISSIVE TRIP: Trapped-key (Castell) physical permissive switch is disengaged.",
+        executionMode: "PHYSICAL_ACTUATION_LOCKED",
+        auditHash,
+      };
+    }
+
+    // Rule 4: Watchdog health
+    const watchdogStatus = scadaWatchdog.canDispatch();
+    if (!watchdogStatus.allowed) {
+      return {
+        accepted: false,
+        blockedReason: watchdogStatus.reason,
+        executionMode: "PHYSICAL_ACTUATION_LOCKED",
+        auditHash,
+      };
+    }
+
+    return {
+      accepted: true,
+      executionMode: "AUTHORIZED_COMMISSIONED",
+      auditHash,
+    };
+  }
+}
+
+export const industrialActuationController = new IndustrialActuationController();
