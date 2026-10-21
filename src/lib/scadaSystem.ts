@@ -13,12 +13,72 @@
 
 import { sha256 } from "./cryptoUtils";
 
+export interface SiteValidationMilestone {
+  id: string;
+  category: "TELEMETRY" | "PROTECTION" | "INTERLOCKS" | "OPERATIONAL" | "COMMISSIONING";
+  title: string;
+  requiredAuthority: string;
+  status: "PENDING_INDEPENDENT_VALIDATION";
+  description: string;
+}
+
+export const SITE_SAFETY_VALIDATION = {
+  isPhysicalActuationPermitted: false as const,
+  systemLockStatus: "EQUIPMENT_ACTUATION_LOCKED_PENDING_SITE_VALIDATION" as const,
+  operationalMode: "PRE_COMMISSIONING_DIGITAL_TWIN_SIMULATION" as const,
+  disclaimer:
+    "OPERATIONAL SAFETY LOCK: Equipment actuation is strictly disabled at the architectural level. All SCADA telemetry, submeter readings, and inverter registers represent digital twin simulation models, and the forecasting engine utilizes synthetic benchmark data. Closed-loop actuation to physical switchgear, inverters, and turbine governors is locked out until independent site-specific telemetry calibration, protection interlocks, and operational safety procedures have been validated and signed off by plant engineering.",
+  checklist: [
+    {
+      id: "VAL-TEL-01",
+      category: "TELEMETRY",
+      title: "Field Instrument & CT/PT Telemetry Calibration",
+      requiredAuthority: "NABL Accredited Calibration Laboratory & Substation Engineering",
+      status: "PENDING_INDEPENDENT_VALIDATION",
+      description: "Physical verification of 0.2S revenue meters, PT transformation ratios, and CT polarity angle calibration across 132kV/33kV incomers.",
+    },
+    {
+      id: "VAL-PRT-02",
+      category: "PROTECTION",
+      title: "Protection Relay Interlock Coordination (IEEE 1547 / IEC 61850)",
+      requiredAuthority: "Lead Protection Engineer & Grid Transmission Authority",
+      status: "PENDING_INDEPENDENT_VALIDATION",
+      description: "Hardware trip curve coordination for reverse power, anti-islanding, breaker failure (50BF), and instantaneous earth-fault trip schemes.",
+    },
+    {
+      id: "VAL-INT-03",
+      category: "INTERLOCKS",
+      title: "Hardwired Trapped-Key (Castell) & Physical Permissive Interlocks",
+      requiredAuthority: "Plant Electrical Safety Committee & DCS Operations",
+      status: "PENDING_INDEPENDENT_VALIDATION",
+      description: "Physical dual-key trapped permissive switch and Master Trip Relay (86) hardwired interlock circuit isolated from software.",
+    },
+    {
+      id: "VAL-SOP-04",
+      category: "OPERATIONAL",
+      title: "Steel Complex HAZOP & Safe Operating Procedures (SOP)",
+      requiredAuthority: "VP Operations & Safety Directorate (Tata Steel Jamshedpur)",
+      status: "PENDING_INDEPENDENT_VALIDATION",
+      description: "Emergency power procedures for blast furnace blowers, hot strip mill dynamic load reject mitigation, and emergency load shedding.",
+    },
+    {
+      id: "VAL-COM-05",
+      category: "COMMISSIONING",
+      title: "Certified Edge Gateway Hardware-in-the-Loop (HIL) Audit",
+      requiredAuthority: "Certified Industrial Cybersecurity Auditor (IEC 62443)",
+      status: "PENDING_INDEPENDENT_VALIDATION",
+      description: "Hardware security token, optical isolation, and certified edge gateway deployment with independent hardware watchdog timer.",
+    },
+  ] as SiteValidationMilestone[],
+} as const;
+
 export const SCADA_SIMULATION_METADATA = {
   mode: "SYNTHETIC_DIGITAL_TWIN_SIMULATION",
   isFieldActuationLocked: true,
+  isPhysicalActuationPermitted: false,
   gatewayProtocolModel: "Modbus TCP / OPC-UA Information Model",
   disclaimer:
-    "DEMO / SIMULATION MODE: All meter readings, BESS registers, and generator telemetry are generated from plant physical models. Field PLC execution is locked in read-only sandbox mode pending certified edge gateway commissioning.",
+    "DEMO / SIMULATION MODE: All meter readings, BESS registers, and generator telemetry are generated from plant physical models. Physical equipment actuation is permanently disabled pending independent site-specific safety validation.",
 } as const;
 
 export interface SubmeterRegister {
@@ -367,6 +427,50 @@ export function simulateDispatchExecution(plan: DispatchCommand): {
 
   AUDIT_LOG.unshift(auditEntry);
   return { success: true, auditEntry, isSimulationOnly: true };
+}
+
+/**
+ * Attempt Physical Equipment Actuation.
+ * 
+ * CRITICAL SAFETY GATEKEEPER:
+ * This method categorically intercepts and blocks any attempt to actuate physical equipment.
+ * Physical actuation is permanently locked until independent site-specific telemetry calibration,
+ * protection relays (IEEE 1547 / IEC 61850), hardware trapped-key permissives, and plant safety SOPs
+ * have been verified and certified.
+ */
+export function attemptPhysicalActuation(plan: DispatchCommand): {
+  success: false;
+  actuationBlocked: true;
+  errorCode: "ERR_PHYSICAL_ACTUATION_LOCKED_PENDING_SITE_VALIDATION";
+  message: string;
+  auditEntry: AuditLogEntry;
+} {
+  const now = new Date().toISOString();
+  const errorPayload = `BLOCKED_PHYSICAL_ACTUATION|${plan.commandId}|${now}|${plan.authorizedBy}|SITE_SAFETY_VALIDATION_INCOMPLETE`;
+  const cryptographicHash = sha256(errorPayload);
+
+  const auditEntry: AuditLogEntry = {
+    id: `AUD-ACT-LOCK-${Date.now()}`,
+    timestamp: now,
+    operatorId: plan.authorizedBy,
+    action: "PHYSICAL_ACTUATION_BLOCKED",
+    targetAsset: "Physical Switchyard & Generator Governors",
+    newSetpoint: "ACTUATION_PERMANENTLY_LOCKED",
+    validationStatus: "REJECTED",
+    hashSha256: cryptographicHash,
+    provenance: "HARDWARE LOCKOUT ACTIVE: Physical equipment actuation rejected pending independent site validation",
+  };
+
+  AUDIT_LOG.unshift(auditEntry);
+
+  return {
+    success: false,
+    actuationBlocked: true,
+    errorCode: "ERR_PHYSICAL_ACTUATION_LOCKED_PENDING_SITE_VALIDATION",
+    message:
+      "PHYSICAL EQUIPMENT ACTUATION REJECTED: All closed-loop physical actuation pathways are locked at the architecture level. Operating strictly in Digital Twin Simulation sandbox mode. Independent telemetry calibration, protection interlocks (IEC 61850), and operational safety sign-offs remain pending.",
+    auditEntry,
+  };
 }
 
 /**

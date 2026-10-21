@@ -269,21 +269,26 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
         </div>
 
         {/* Footer Buttons */}
-        <div className="pt-4 border-t border-[#F3F0EA] flex items-center justify-end gap-3 mt-4">
-          <button
-            onClick={onClose}
-            className="rounded-2xl border border-[#E6E1D7] bg-white px-5 py-2.5 text-xs font-bold text-[#1F2937] hover:bg-[#FAF8F5] transition-all cursor-pointer"
-          >
-            Close
-          </button>
-          <button
-            onClick={() => {
-              onClose();
-            }}
-            className="rounded-2xl bg-[#1B4D3E] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#133E32] transition-all shadow-md cursor-pointer"
-          >
-            Apply to Digital Twin
-          </button>
+        <div className="pt-4 border-t border-[#F3F0EA] flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+          <span className="text-[11px] text-[#6B7280]">
+            Digital Twin Mode: <strong className="text-amber-800">Physical Actuation Locked</strong> pending site validation.
+          </span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="rounded-2xl border border-[#E6E1D7] bg-white px-5 py-2.5 text-xs font-bold text-[#1F2937] hover:bg-[#FAF8F5] transition-all cursor-pointer"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => {
+                onClose();
+              }}
+              className="rounded-2xl bg-[#1B4D3E] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#133E32] transition-all shadow-md cursor-pointer"
+            >
+              Simulate in Sandbox (Actuation Locked)
+            </button>
+          </div>
         </div>
       </div>
     </div>

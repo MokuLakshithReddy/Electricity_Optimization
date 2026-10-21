@@ -249,6 +249,40 @@ npm run build
 npm run preview
 ```
 
+### 🧪 Optimizer Mathematical Proof & Verification Suite
+Run the rigorous mathematical proof test suite covering all multi-interval constraints, edge cases, and comparison against an independent reference LP solver:
+
+```bash
+npm run test:optimizer
+```
+
+#### Verified Test Criteria:
+1. **Power Balance Precision**: $\sum P_{\text{supply}} - P_{\text{charge}} = P_{\text{demand}}$ verified within $0.05\text{ MW}$ across all 24 individual intervals.
+2. **Battery Envelope & Inter-Temporal Kinetics**: Strict enforcement of $[15\%, 95\%]$ operating bounds, rated C-rate limits, and kinetic conservation equation ($\text{SoC}_t = \text{SoC}_{t-1} + \Delta\text{SoC}$).
+3. **Thermal Ramping & Unit Commitment**: Captive ramp rate $\le 180\text{ MW/h}$, diesel ramp rate $\le 240\text{ MW/h}$, minimum stable load $P_{\min} \ge 15\text{ MW}$, and discrete startup penalties.
+4. **Grid Outage & Overload Handling**: Clean islanded solution ($0\text{ MW}$ grid import) and immediate deficit flagging during extreme overload ($950\text{ MW}$).
+5. **Strict Infeasibility Isolation**: Infeasible scenarios strictly output `isExecutablePlan: false` and `dispatch: null` (no emergency proposal is ever treated as an executable plan).
+6. **Comparison Against Independent Reference Solver**: Benchmarked against an independent reference LP solver across 4 reproducible scenarios, confirming exact cost optimality ($< 0.05\%$ variance) and dispatch equivalence.
+
+---
+
+## 🛡️ Industrial Safety Demarcation & Field Validation Gatekeeper
+
+> [!WARNING]
+> **PHYSICAL EQUIPMENT ACTUATION PERMANENTLY DISABLED**
+> 
+> The SCADA telemetry, Modbus registers, and BESS models in this repository describe a **Digital Twin Simulation Sandbox**, and the load forecasting engine operates on **synthetic industrial benchmark data**. This is appropriate for pre-commissioning software development, but **does not constitute evidence of validated real-world performance at a live industrial steel manufacturing facility**.
+
+Closed-loop physical equipment actuation to switchgear, PLCs, inverters, and turbine governors is **permanently disabled at the architecture level** until the following 5 site-specific prerequisites are independently completed and signed off:
+
+| Milestone ID | Domain | Required Authority | Description | Status |
+|---|---|---|---|---|
+| `VAL-TEL-01` | **Telemetry Calibration** | NABL Accredited Lab & Substation Team | Physical calibration of 0.2S revenue meters, PT transformation ratios, and CT phase angle checks across 132kV incomers. | ⏳ Pending Validation |
+| `VAL-PRT-02` | **Protection Coordination** | Lead Protection Engineer (IEEE 1547 / IEC 61850) | Coordination of reverse-power trip curves, anti-islanding schemes, breaker failure (50BF), and earth-fault relays. | ⏳ Pending Validation |
+| `VAL-INT-03` | **Permissive Interlocks** | Plant Electrical Safety Committee & DCS Operations | Physical dual-key trapped permissive switch (Castell) and Master Trip Relay (86) hardwired interlocks isolated from software. | ⏳ Pending Validation |
+| `VAL-SOP-04` | **Steel Complex HAZOP** | VP Operations (Tata Steel Jamshedpur) | Formal Hazard and Operability study for blast furnace blower emergency power, hot strip mill dynamic load reject, and shed priority. | ⏳ Pending Validation |
+| `VAL-COM-05` | **Hardware Gateway Audit** | Certified Industrial Cybersecurity Auditor (IEC 62443) | Security token, optical isolation, and certified physical edge gateway deployment with independent hardware watchdog relay. | ⏳ Pending Validation |
+
 ---
 
 ## 📄 License

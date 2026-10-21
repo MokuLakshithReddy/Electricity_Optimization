@@ -10,7 +10,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:optimizer": "tsx src/test/optimizer.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -627,10 +627,18 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       dWind = Number(bestSolution.x[1].toFixed(2));
       dBatDis = Number(bestSolution.x[2].toFixed(2));
       dBatCh = Number(bestSolution.x[3].toFixed(2));
-      dGridContract = Number(bestSolution.x[4].toFixed(2));
       dGridExcess = Number(bestSolution.x[5].toFixed(2));
       dCaptive = Number((captiveMinRamped + bestSolution.x[6]).toFixed(2));
       dGen = Number(((chosenCommitment ? genMinRamped : 0) + bestSolution.x[7]).toFixed(2));
+
+      // Reconcile rounding to enforce exact power balance constraint:
+      // sum(generation) + BatDis - BatCh + Grid = demand
+      const nonContractSum = dSolar + dWind + dBatDis - dBatCh + dGridExcess + dCaptive + dGen;
+      dGridContract = Number((demand - nonContractSum).toFixed(2));
+      if (dGridContract < 0) {
+        dCaptive = Number(Math.max(c.captiveMinMW, dCaptive + dGridContract).toFixed(2));
+        dGridContract = Number(Math.max(0, demand - (dSolar + dWind + dBatDis - dBatCh + dGridExcess + dCaptive + dGen)).toFixed(2));
+      }
 
       intervalCost =
         dSolar * solarCostMWh +

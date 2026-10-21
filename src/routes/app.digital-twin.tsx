@@ -94,6 +94,28 @@ function DigitalTwin() {
         }
       />
 
+      {/* Real-World Safety Demarcation Banner */}
+      <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                Digital Twin Simulation Sandbox
+              </span>
+              <span className="bg-amber-500/20 text-amber-900 border border-amber-500/40 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                PHYSICAL EQUIPMENT ACTUATION PERMANENTLY DISABLED
+              </span>
+            </div>
+            <p className="text-xs text-amber-800/90 mt-1 leading-relaxed">
+              All telemetry, battery kinetics, and dispatch outputs in this digital twin represent synthetic simulation models for pre-commissioning development.
+              Equipment actuation is permanently disabled and locked out until site-specific telemetry, protection relays (IEEE 1547 / IEC 61850),
+              hardwired trapped-key interlocks, and operational safety procedures have been independently validated.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
         {/* Controls Card */}
         <GlassCard delay={0.05}>
