@@ -25,7 +25,8 @@ export function LiveEnergyStatus({
   // Semi-circle SVG gauge calculation
   const radius = 70;
   const circumference = Math.PI * radius;
-  const strokeDashoffset = circumference - (Math.min(100, Math.max(0, renewablePct)) / 100) * circumference;
+  const strokeDashoffset =
+    circumference - (Math.min(100, Math.max(0, renewablePct)) / 100) * circumference;
 
   return (
     <div className="rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs flex flex-col justify-between">
@@ -81,7 +82,9 @@ export function LiveEnergyStatus({
         </div>
 
         {/* Status Badge below Gauge */}
-        <div className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${energyState.reliability < 99.0 ? "bg-rose-50 text-rose-800 border-rose-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"}`}>
+        <div
+          className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${energyState.reliability < 99.0 ? "bg-rose-50 text-rose-800 border-rose-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"}`}
+        >
           {energyState.reliability < 99.0 ? (
             <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
           ) : (
@@ -90,7 +93,8 @@ export function LiveEnergyStatus({
           <span>{systemStatus}</span>
         </div>
         <p className="mt-1 text-[11px] text-[#6B7280]">
-          <strong className="text-emerald-700 font-semibold">{renewablePct}%</strong> load served by renewables
+          <strong className="text-emerald-700 font-semibold">{renewablePct}%</strong> load served by
+          renewables
         </p>
       </div>
 

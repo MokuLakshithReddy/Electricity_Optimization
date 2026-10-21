@@ -1,6 +1,6 @@
 /**
  * IntelliGrid AI - Industrial Energy Telemetry Dataset
- * 
+ *
  * DATA PROVENANCE NOTICE:
  * All plant locations, power dispatch values (MW), costs, and savings in this module
  * are synthetic digital twin benchmarks generated for pre-commissioning software development.

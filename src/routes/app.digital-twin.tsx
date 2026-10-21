@@ -1,7 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Battery, Boxes, Factory, Fuel, Sun, Zap, TriangleAlert, Activity, CheckCircle2, ShieldAlert } from "lucide-react";
+import {
+  Battery,
+  Boxes,
+  Factory,
+  Fuel,
+  Sun,
+  Zap,
+  TriangleAlert,
+  Activity,
+  CheckCircle2,
+  ShieldAlert,
+} from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -31,7 +42,8 @@ export const Route = createFileRoute("/app/digital-twin")({
       { property: "og:title", content: "Digital Twin Simulator — IntelliGrid AI" },
       {
         property: "og:description",
-        content: "What-if physical and financial scenario modelling for industrial energy investments.",
+        content:
+          "What-if physical and financial scenario modelling for industrial energy investments.",
       },
     ],
   }),
@@ -39,10 +51,34 @@ export const Route = createFileRoute("/app/digital-twin")({
 });
 
 const sliders = [
-  { key: "solar", label: "Additional solar capacity", unit: "MW", min: 0, max: 250, step: 10, icon: Sun },
-  { key: "battery", label: "Additional battery size", unit: "MWh", min: 0, max: 500, step: 20, icon: Battery },
+  {
+    key: "solar",
+    label: "Additional solar capacity",
+    unit: "MW",
+    min: 0,
+    max: 250,
+    step: 10,
+    icon: Sun,
+  },
+  {
+    key: "battery",
+    label: "Additional battery size",
+    unit: "MWh",
+    min: 0,
+    max: 500,
+    step: 20,
+    icon: Battery,
+  },
   { key: "fuel", label: "Fuel price change", unit: "%", min: -30, max: 80, step: 5, icon: Fuel },
-  { key: "production", label: "Production increase", unit: "%", min: 0, max: 60, step: 5, icon: Factory },
+  {
+    key: "production",
+    label: "Production increase",
+    unit: "%",
+    min: 0,
+    max: 60,
+    step: 5,
+    icon: Factory,
+  },
 ] as const;
 
 type Key = (typeof sliders)[number]["key"];
@@ -88,7 +124,11 @@ function DigitalTwin() {
         subtitle="Physics-informed 24h chronological dispatch & financial investment simulation"
         right={
           <StatusPill
-            status={gridFail ? "Simulating Grid Outage (Islanded)" : "Physics Model Synced · 89% Round-Trip"}
+            status={
+              gridFail
+                ? "Simulating Grid Outage (Islanded)"
+                : "Physics Model Synced · 89% Round-Trip"
+            }
             tone={gridFail ? "warn" : "eco"}
           />
         }
@@ -108,9 +148,11 @@ function DigitalTwin() {
               </span>
             </div>
             <p className="text-xs text-amber-800/90 mt-1 leading-relaxed">
-              All telemetry, battery kinetics, and dispatch outputs in this digital twin represent synthetic simulation models for pre-commissioning development.
-              Equipment actuation is permanently disabled and locked out until site-specific telemetry, protection relays (IEEE 1547 / IEC 61850),
-              hardwired trapped-key interlocks, and operational safety procedures have been independently validated.
+              All telemetry, battery kinetics, and dispatch outputs in this digital twin represent
+              synthetic simulation models for pre-commissioning development. Equipment actuation is
+              permanently disabled and locked out until site-specific telemetry, protection relays
+              (IEEE 1547 / IEC 61850), hardwired trapped-key interlocks, and operational safety
+              procedures have been independently validated.
             </p>
           </div>
         </div>
@@ -164,13 +206,16 @@ function DigitalTwin() {
               <span className="flex items-center gap-2">
                 <TriangleAlert className="h-4 w-4" /> Simulate Grid Incomer Failure
               </span>
-              <span className="text-xs px-2 py-0.5 rounded-md font-mono">{gridFail ? "ISLANDED" : "OFF"}</span>
+              <span className="text-xs px-2 py-0.5 rounded-md font-mono">
+                {gridFail ? "ISLANDED" : "OFF"}
+              </span>
             </button>
 
             {/* Model Physical Assumptions Legend */}
             <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-[11px] space-y-1.5 text-muted-foreground">
               <p className="font-bold text-foreground flex items-center gap-1.5">
-                <Activity className="h-3.5 w-3.5 text-emerald-500" /> Physical Simulation Constraints:
+                <Activity className="h-3.5 w-3.5 text-emerald-500" /> Physical Simulation
+                Constraints:
               </p>
               <div className="grid grid-cols-2 gap-1 font-mono text-[10px]">
                 <span>• BESS Round-trip: 89.0%</span>
@@ -224,7 +269,8 @@ function DigitalTwin() {
                   Chronological 24-Hour Dispatch & BESS State-of-Charge
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Physical hourly dispatch accounting for solar diurnal cycle, ToD tariffs, and battery efficiency losses
+                  Physical hourly dispatch accounting for solar diurnal cycle, ToD tariffs, and
+                  battery efficiency losses
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -240,7 +286,10 @@ function DigitalTwin() {
             {showChronologicalSchedule && (
               <div className="h-[280px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={sim.hourlySchedule} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <AreaChart
+                    data={sim.hourlySchedule}
+                    margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                  >
                     <defs>
                       <linearGradient id="solarArea" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.6} />
@@ -256,7 +305,12 @@ function DigitalTwin() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="timeLabel" stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                    <XAxis
+                      dataKey="timeLabel"
+                      stroke="var(--muted-foreground)"
+                      fontSize={10}
+                      tickLine={false}
+                    />
                     <YAxis stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
                     <Tooltip
                       contentStyle={{
@@ -267,11 +321,44 @@ function DigitalTwin() {
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Area type="monotone" dataKey="solarMW" name="Solar PV (MW)" stroke="#F59E0B" fill="url(#solarArea)" />
-                    <Area type="monotone" dataKey="windMW" name="Wind Farm (MW)" stroke="#0284C7" fill="url(#windArea)" />
-                    <Area type="monotone" dataKey="gridMW" name="Grid Import (MW)" stroke="#6B7280" fill="url(#gridArea)" />
-                    <Line type="monotone" dataKey="demandMW" name="Factory Demand (MW)" stroke="#EF4444" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="batterySOC" name="BESS SoC (%)" stroke="#10B981" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+                    <Area
+                      type="monotone"
+                      dataKey="solarMW"
+                      name="Solar PV (MW)"
+                      stroke="#F59E0B"
+                      fill="url(#solarArea)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="windMW"
+                      name="Wind Farm (MW)"
+                      stroke="#0284C7"
+                      fill="url(#windArea)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="gridMW"
+                      name="Grid Import (MW)"
+                      stroke="#6B7280"
+                      fill="url(#gridArea)"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="demandMW"
+                      name="Factory Demand (MW)"
+                      stroke="#EF4444"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="batterySOC"
+                      name="BESS SoC (%)"
+                      stroke="#10B981"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -282,18 +369,26 @@ function DigitalTwin() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <GlassCard delay={0.2}>
               <h2 className="text-sm font-semibold">Annualized Financial Comparison</h2>
-              <p className="text-xs text-muted-foreground">Baseline vs Simulated Operating Cost (₹ Crore/year)</p>
+              <p className="text-xs text-muted-foreground">
+                Baseline vs Simulated Operating Cost (₹ Crore/year)
+              </p>
               <div className="mt-4 space-y-3 text-xs">
                 <div className="flex justify-between items-center pb-2 border-b border-border/50">
                   <span className="text-muted-foreground">Baseline Energy Cost (unmanaged):</span>
-                  <span className="font-mono font-bold text-foreground">₹{sim.baselineAnnualCostCr} Cr</span>
+                  <span className="font-mono font-bold text-foreground">
+                    ₹{sim.baselineAnnualCostCr} Cr
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-border/50">
                   <span className="text-muted-foreground">Simulated Optimized Energy Cost:</span>
-                  <span className="font-mono font-bold text-emerald-600">₹{sim.simulatedAnnualCostCr} Cr</span>
+                  <span className="font-mono font-bold text-emerald-600">
+                    ₹{sim.simulatedAnnualCostCr} Cr
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-border/50">
-                  <span className="text-muted-foreground">Estimated Capital Expenditure (CAPEX):</span>
+                  <span className="text-muted-foreground">
+                    Estimated Capital Expenditure (CAPEX):
+                  </span>
                   <span className="font-mono font-bold text-foreground">₹{sim.capexCr} Cr</span>
                 </div>
                 <div className="flex justify-between items-center text-emerald-700 font-bold">
@@ -305,25 +400,35 @@ function DigitalTwin() {
 
             <GlassCard delay={0.22}>
               <h2 className="text-sm font-semibold">Reliability & Emissions Balance</h2>
-              <p className="text-xs text-muted-foreground">Loss of load expectation and carbon footprint</p>
+              <p className="text-xs text-muted-foreground">
+                Loss of load expectation and carbon footprint
+              </p>
               <div className="mt-4 space-y-3 text-xs">
                 <div className="flex justify-between items-center pb-2 border-b border-border/50">
                   <span className="text-muted-foreground">Power System Availability:</span>
-                  <span className={`font-mono font-bold ${sim.powerAvailabilityPct > 99.5 ? "text-emerald-600" : "text-amber-600"}`}>
+                  <span
+                    className={`font-mono font-bold ${sim.powerAvailabilityPct > 99.5 ? "text-emerald-600" : "text-amber-600"}`}
+                  >
                     {sim.powerAvailabilityPct}%
                   </span>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-border/50">
                   <span className="text-muted-foreground">Annual Unserved Energy Shortfall:</span>
-                  <span className="font-mono font-bold text-foreground">{sim.unservedEnergyMWhAnnual} MWh</span>
+                  <span className="font-mono font-bold text-foreground">
+                    {sim.unservedEnergyMWhAnnual} MWh
+                  </span>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-border/50">
                   <span className="text-muted-foreground">BESS Annual Capacity Fade Rate:</span>
-                  <span className="font-mono font-bold text-foreground">~{sim.batteryCycleDegradationPctPerYear}% / year</span>
+                  <span className="font-mono font-bold text-foreground">
+                    ~{sim.batteryCycleDegradationPctPerYear}% / year
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-cyan font-bold">
                   <span>CO₂ Avoided Annually:</span>
-                  <span className="font-mono text-sm">{sim.annualCO2AvoidedTonnes.toLocaleString("en-IN")} tonnes</span>
+                  <span className="font-mono text-sm">
+                    {sim.annualCO2AvoidedTonnes.toLocaleString("en-IN")} tonnes
+                  </span>
                 </div>
               </div>
             </GlassCard>

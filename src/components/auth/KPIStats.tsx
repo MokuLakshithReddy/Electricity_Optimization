@@ -9,7 +9,9 @@ export function KPIStats({ className = "" }: { className?: string }) {
   }, []);
 
   return (
-    <div className={`grid grid-cols-3 gap-4 lg:gap-8 border-t border-slate-800/60 pt-6 ${className}`}>
+    <div
+      className={`grid grid-cols-3 gap-4 lg:gap-8 border-t border-slate-800/60 pt-6 ${className}`}
+    >
       <div>
         <div className="font-display text-2xl lg:text-3xl font-bold text-white tracking-tight">
           {kpis.energyCostReduction.toFixed(1)}%
@@ -23,9 +25,7 @@ export function KPIStats({ className = "" }: { className?: string }) {
         <div className="font-display text-2xl lg:text-3xl font-bold text-white tracking-tight">
           {kpis.co2AvoidedMTD.toLocaleString()} t
         </div>
-        <div className="text-xs text-slate-400 font-medium mt-1 leading-snug">
-          CO₂ avoided MTD
-        </div>
+        <div className="text-xs text-slate-400 font-medium mt-1 leading-snug">CO₂ avoided MTD</div>
       </div>
 
       <div>

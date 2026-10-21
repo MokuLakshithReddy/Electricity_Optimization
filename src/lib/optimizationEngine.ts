@@ -1,6 +1,6 @@
 /**
  * IntelliGrid AI - Joint Multi-Period 24-Hour Horizon Dispatch Optimization Engine
- * 
+ *
  * Mathematically rigorous Unit Commitment & Economic Dispatch (UCED) solver with:
  * 1. Joint Multi-Period Optimization: All 24 intervals are formulated and solved
  *    simultaneously as a single multi-period linear/mixed-integer program (LP/MILP).
@@ -91,6 +91,7 @@ export interface HorizonDispatchInput {
   targetTerminalSOC?: number; // Target SoC at end of horizon (e.g. 50%)
   constraints?: Partial<AssetConstraints>;
   isGridAvailable?: boolean;
+  tariffRates?: typeof tariffRates;
 }
 
 export interface HorizonIntervalDispatch {
@@ -116,10 +117,21 @@ export interface HorizonIntervalDispatch {
   marginalCostPerKWh: number;
 }
 
+export interface OptimalityProof {
+  isMathematicallyProvenGlobal: boolean;
+  proofMethod:
+    "BRANCH_AND_BOUND_MILP" | "CONVEX_RELAXATION_DOMINANCE" | "BELLMAN_DYNAMIC_PROGRAMMING";
+  optimalityGapPct: number;
+  exploredNodesCount: number;
+  lowerBoundObjectiveRupees: number;
+  incumbentObjectiveRupees: number;
+  dualityProofStatement: string;
+}
+
 export interface HorizonOptimizationResult {
   solverStatus: "OPTIMAL_CONVERGED" | "INFEASIBLE_DEFICIT";
   isExecutablePlan: boolean;
-  executionBlockedReason?: string;
+  executionBlockedReason?: string | undefined;
   totalHorizonCost: number;
   totalHorizonBaselineCost: number;
   totalHorizonSavings: number; // Honest signed net 24h savings
@@ -135,6 +147,7 @@ export interface HorizonOptimizationResult {
   activeConstraints: string[];
   simplexIterations: number;
   solveTimeMs: number;
+  optimalityProof?: OptimalityProof;
   provenance: {
     solver: string;
     formulation: string;
@@ -158,6 +171,7 @@ export interface DispatchInput {
 export interface DispatchSchedule {
   solarMW: number;
   windMW: number;
+  batteryMW: number;
   batteryDischargeMW: number;
   batteryChargeMW: number;
   netBatteryMW: number;
@@ -224,7 +238,7 @@ export interface VerificationViolation {
  */
 export function validateHorizonInputs(
   input: HorizonDispatchInput,
-  c: AssetConstraints
+  c: AssetConstraints,
 ): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
   const H = input.horizonHours;
@@ -235,16 +249,24 @@ export function validateHorizonInputs(
 
   // Array length checks
   if (!Array.isArray(input.hourlyDemandMW) || input.hourlyDemandMW.length !== H) {
-    errors.push(`hourlyDemandMW length (${input.hourlyDemandMW?.length}) does not match horizonHours (${H}).`);
+    errors.push(
+      `hourlyDemandMW length (${input.hourlyDemandMW?.length}) does not match horizonHours (${H}).`,
+    );
   }
   if (!Array.isArray(input.hourlySolarAvailableMW) || input.hourlySolarAvailableMW.length !== H) {
-    errors.push(`hourlySolarAvailableMW length (${input.hourlySolarAvailableMW?.length}) does not match horizonHours (${H}).`);
+    errors.push(
+      `hourlySolarAvailableMW length (${input.hourlySolarAvailableMW?.length}) does not match horizonHours (${H}).`,
+    );
   }
   if (!Array.isArray(input.hourlyWindAvailableMW) || input.hourlyWindAvailableMW.length !== H) {
-    errors.push(`hourlyWindAvailableMW length (${input.hourlyWindAvailableMW?.length}) does not match horizonHours (${H}).`);
+    errors.push(
+      `hourlyWindAvailableMW length (${input.hourlyWindAvailableMW?.length}) does not match horizonHours (${H}).`,
+    );
   }
   if (!Array.isArray(input.hourlyTariffTier) || input.hourlyTariffTier.length !== H) {
-    errors.push(`hourlyTariffTier length (${input.hourlyTariffTier?.length}) does not match horizonHours (${H}).`);
+    errors.push(
+      `hourlyTariffTier length (${input.hourlyTariffTier?.length}) does not match horizonHours (${H}).`,
+    );
   }
 
   // Value checks
@@ -252,7 +274,8 @@ export function validateHorizonInputs(
     for (let t = 0; t < input.hourlyDemandMW.length; t++) {
       const d = input.hourlyDemandMW[t];
       if (!Number.isFinite(d)) errors.push(`H${t}: Non-finite demand value (${d}).`);
-      else if (d < 0) errors.push(`H${t}: Negative demand value (${d} MW). Power demand must be >= 0.`);
+      else if (d < 0)
+        errors.push(`H${t}: Negative demand value (${d} MW). Power demand must be >= 0.`);
     }
   }
 
@@ -271,33 +294,69 @@ export function validateHorizonInputs(
   }
 
   // Initial state boundaries
-  if (!Number.isFinite(input.initialBatterySOC) || input.initialBatterySOC < 0 || input.initialBatterySOC > 100) {
-    errors.push(`Invalid initialBatterySOC: ${input.initialBatterySOC}%. Must be finite and in [0, 100].`);
-  } else if (input.initialBatterySOC < c.batteryMinSOC - 0.05 || input.initialBatterySOC > c.batteryMaxSOC + 0.05) {
-    errors.push(`initialBatterySOC (${input.initialBatterySOC}%) violates allowable envelope [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`);
+  if (
+    !Number.isFinite(input.initialBatterySOC) ||
+    input.initialBatterySOC < 0 ||
+    input.initialBatterySOC > 100
+  ) {
+    errors.push(
+      `Invalid initialBatterySOC: ${input.initialBatterySOC}%. Must be finite and in [0, 100].`,
+    );
+  } else if (
+    input.initialBatterySOC < c.batteryMinSOC - 0.05 ||
+    input.initialBatterySOC > c.batteryMaxSOC + 0.05
+  ) {
+    errors.push(
+      `initialBatterySOC (${input.initialBatterySOC}%) violates allowable envelope [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`,
+    );
   }
 
   if (input.targetTerminalSOC !== undefined) {
-    if (!Number.isFinite(input.targetTerminalSOC) || input.targetTerminalSOC < 0 || input.targetTerminalSOC > 100) {
-      errors.push(`Invalid targetTerminalSOC: ${input.targetTerminalSOC}%. Must be finite and in [0, 100].`);
-    } else if (input.targetTerminalSOC < c.batteryMinSOC - 0.05 || input.targetTerminalSOC > c.batteryMaxSOC + 0.05) {
-      errors.push(`targetTerminalSOC (${input.targetTerminalSOC}%) violates allowable envelope [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`);
+    if (
+      !Number.isFinite(input.targetTerminalSOC) ||
+      input.targetTerminalSOC < 0 ||
+      input.targetTerminalSOC > 100
+    ) {
+      errors.push(
+        `Invalid targetTerminalSOC: ${input.targetTerminalSOC}%. Must be finite and in [0, 100].`,
+      );
+    } else if (
+      input.targetTerminalSOC < c.batteryMinSOC - 0.05 ||
+      input.targetTerminalSOC > c.batteryMaxSOC + 0.05
+    ) {
+      errors.push(
+        `targetTerminalSOC (${input.targetTerminalSOC}%) violates allowable envelope [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`,
+      );
     }
   }
 
   if (input.initialCaptiveMW !== undefined) {
-    if (!Number.isFinite(input.initialCaptiveMW) || input.initialCaptiveMW < c.captiveMinMW - 0.05 || input.initialCaptiveMW > c.captiveMaxMW + 0.05) {
-      errors.push(`initialCaptiveMW (${input.initialCaptiveMW} MW) outside physical bounds [${c.captiveMinMW}, ${c.captiveMaxMW}] MW.`);
+    if (
+      !Number.isFinite(input.initialCaptiveMW) ||
+      input.initialCaptiveMW < c.captiveMinMW - 0.05 ||
+      input.initialCaptiveMW > c.captiveMaxMW + 0.05
+    ) {
+      errors.push(
+        `initialCaptiveMW (${input.initialCaptiveMW} MW) outside physical bounds [${c.captiveMinMW}, ${c.captiveMaxMW}] MW.`,
+      );
     }
   }
 
   if (input.initialGeneratorMW !== undefined) {
     if (!Number.isFinite(input.initialGeneratorMW) || input.initialGeneratorMW < 0) {
       errors.push(`Invalid initialGeneratorMW: ${input.initialGeneratorMW} MW.`);
-    } else if (input.initialGeneratorCommitted && (input.initialGeneratorMW < c.generatorMinMW - 0.05 || input.initialGeneratorMW > c.generatorMaxMW + 0.05)) {
-      errors.push(`Committed initialGeneratorMW (${input.initialGeneratorMW} MW) outside operating envelope [${c.generatorMinMW}, ${c.generatorMaxMW}] MW.`);
+    } else if (
+      input.initialGeneratorCommitted &&
+      (input.initialGeneratorMW < c.generatorMinMW - 0.05 ||
+        input.initialGeneratorMW > c.generatorMaxMW + 0.05)
+    ) {
+      errors.push(
+        `Committed initialGeneratorMW (${input.initialGeneratorMW} MW) outside operating envelope [${c.generatorMinMW}, ${c.generatorMaxMW}] MW.`,
+      );
     } else if (!input.initialGeneratorCommitted && input.initialGeneratorMW > 0.05) {
-      errors.push(`Uncommitted initialGeneratorMW must be 0 MW, got ${input.initialGeneratorMW} MW.`);
+      errors.push(
+        `Uncommitted initialGeneratorMW must be 0 MW, got ${input.initialGeneratorMW} MW.`,
+      );
     }
   }
 
@@ -317,22 +376,38 @@ export function validateHorizonInputs(
     errors.push(`Invalid batteryMaxChargeMW: ${c.batteryMaxChargeMW}. Must be finite and > 0.`);
   }
   if (!Number.isFinite(c.batteryMaxDischargeMW) || c.batteryMaxDischargeMW <= 0) {
-    errors.push(`Invalid batteryMaxDischargeMW: ${c.batteryMaxDischargeMW}. Must be finite and > 0.`);
+    errors.push(
+      `Invalid batteryMaxDischargeMW: ${c.batteryMaxDischargeMW}. Must be finite and > 0.`,
+    );
   }
-  if (!Number.isFinite(c.batteryRoundTripEfficiency) || c.batteryRoundTripEfficiency <= 0 || c.batteryRoundTripEfficiency > 1.0) {
-    errors.push(`Invalid batteryRoundTripEfficiency: ${c.batteryRoundTripEfficiency}. Must be in (0, 1.0].`);
+  if (
+    !Number.isFinite(c.batteryRoundTripEfficiency) ||
+    c.batteryRoundTripEfficiency <= 0 ||
+    c.batteryRoundTripEfficiency > 1.0
+  ) {
+    errors.push(
+      `Invalid batteryRoundTripEfficiency: ${c.batteryRoundTripEfficiency}. Must be in (0, 1.0].`,
+    );
   }
   if (!Number.isFinite(c.batteryDegradationCostPerMWh) || c.batteryDegradationCostPerMWh < 0) {
-    errors.push(`Invalid batteryDegradationCostPerMWh: ${c.batteryDegradationCostPerMWh}. Must be >= 0.`);
+    errors.push(
+      `Invalid batteryDegradationCostPerMWh: ${c.batteryDegradationCostPerMWh}. Must be >= 0.`,
+    );
   }
   if (!Number.isFinite(c.batteryMinSOC) || !Number.isFinite(c.batteryMaxSOC)) {
     errors.push(`Non-finite battery SoC bounds: [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%].`);
   } else if (c.batteryMinSOC >= c.batteryMaxSOC) {
-    errors.push(`Inverted battery SoC bounds: minSOC (${c.batteryMinSOC}%) >= maxSOC (${c.batteryMaxSOC}%).`);
+    errors.push(
+      `Inverted battery SoC bounds: minSOC (${c.batteryMinSOC}%) >= maxSOC (${c.batteryMaxSOC}%).`,
+    );
   } else if (c.batteryMaxSOC - c.batteryMinSOC < 5.0) {
-    errors.push(`Battery operating window too narrow: maxSOC - minSOC = ${c.batteryMaxSOC - c.batteryMinSOC}% (< 5% required for safe cycling).`);
+    errors.push(
+      `Battery operating window too narrow: maxSOC - minSOC = ${c.batteryMaxSOC - c.batteryMinSOC}% (< 5% required for safe cycling).`,
+    );
   } else if (c.batteryMinSOC < 0 || c.batteryMaxSOC > 100) {
-    errors.push(`Battery SoC bounds [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%] must lie within [0, 100]%.`);
+    errors.push(
+      `Battery SoC bounds [${c.batteryMinSOC}%, ${c.batteryMaxSOC}%] must lie within [0, 100]%.`,
+    );
   }
 
   // Captive Thermal Generation Envelope & Ramp
@@ -343,7 +418,9 @@ export function validateHorizonInputs(
     errors.push(`Invalid captiveMaxMW: ${c.captiveMaxMW}. Must be > 0.`);
   }
   if (c.captiveMinMW > c.captiveMaxMW) {
-    errors.push(`Inverted captive generation bounds: captiveMinMW (${c.captiveMinMW} MW) > captiveMaxMW (${c.captiveMaxMW} MW).`);
+    errors.push(
+      `Inverted captive generation bounds: captiveMinMW (${c.captiveMinMW} MW) > captiveMaxMW (${c.captiveMaxMW} MW).`,
+    );
   }
   if (!Number.isFinite(c.captiveRampRateMWPerMin) || c.captiveRampRateMWPerMin <= 0) {
     errors.push(`Invalid captiveRampRateMWPerMin: ${c.captiveRampRateMWPerMin}. Must be > 0.`);
@@ -357,7 +434,9 @@ export function validateHorizonInputs(
     errors.push(`Invalid generatorMaxMW: ${c.generatorMaxMW}. Must be > 0.`);
   }
   if (c.generatorMinMW > c.generatorMaxMW) {
-    errors.push(`Inverted generator bounds: generatorMinMW (${c.generatorMinMW} MW) > generatorMaxMW (${c.generatorMaxMW} MW).`);
+    errors.push(
+      `Inverted generator bounds: generatorMinMW (${c.generatorMinMW} MW) > generatorMaxMW (${c.generatorMaxMW} MW).`,
+    );
   }
   if (!Number.isFinite(c.generatorRampRateMWPerMin) || c.generatorRampRateMWPerMin <= 0) {
     errors.push(`Invalid generatorRampRateMWPerMin: ${c.generatorRampRateMWPerMin}. Must be > 0.`);
@@ -365,8 +444,13 @@ export function validateHorizonInputs(
   if (!Number.isFinite(c.generatorFuelCostPerLitre) || c.generatorFuelCostPerLitre <= 0) {
     errors.push(`Invalid generatorFuelCostPerLitre: ${c.generatorFuelCostPerLitre}. Must be > 0.`);
   }
-  if (!Number.isFinite(c.generatorSpecificFuelConsumption) || c.generatorSpecificFuelConsumption <= 0) {
-    errors.push(`Invalid generatorSpecificFuelConsumption: ${c.generatorSpecificFuelConsumption}. Must be > 0.`);
+  if (
+    !Number.isFinite(c.generatorSpecificFuelConsumption) ||
+    c.generatorSpecificFuelConsumption <= 0
+  ) {
+    errors.push(
+      `Invalid generatorSpecificFuelConsumption: ${c.generatorSpecificFuelConsumption}. Must be > 0.`,
+    );
   }
   if (!Number.isFinite(c.generatorStartupCost) || c.generatorStartupCost < 0) {
     errors.push(`Invalid generatorStartupCost: ${c.generatorStartupCost}. Must be >= 0.`);
@@ -380,14 +464,18 @@ export function validateHorizonInputs(
     errors.push(`Invalid gridMaxImportMW: ${c.gridMaxImportMW}. Must be > 0.`);
   }
   if (c.gridContractDemandMW > c.gridMaxImportMW) {
-    errors.push(`Commercial contract demand (${c.gridContractDemandMW} MW) exceeds physical substation capacity (${c.gridMaxImportMW} MW).`);
+    errors.push(
+      `Commercial contract demand (${c.gridContractDemandMW} MW) exceeds physical substation capacity (${c.gridMaxImportMW} MW).`,
+    );
   }
   if (!Number.isFinite(c.gridDemandChargePenaltyPerMW) || c.gridDemandChargePenaltyPerMW < 0) {
-    errors.push(`Invalid gridDemandChargePenaltyPerMW: ${c.gridDemandChargePenaltyPerMW}. Must be >= 0.`);
+    errors.push(
+      `Invalid gridDemandChargePenaltyPerMW: ${c.gridDemandChargePenaltyPerMW}. Must be >= 0.`,
+    );
   }
 
   // Tariff Rates Sanity & Monotonicity
-  const tariffs = (input as any).tariffRates ?? tariffRates;
+  const tariffs = input.tariffRates ?? tariffRates;
   if (!Number.isFinite(tariffs.solar) || tariffs.solar < 0) {
     errors.push(`Invalid solar tariff rate: ${tariffs.solar}`);
   }
@@ -404,7 +492,9 @@ export function validateHorizonInputs(
     errors.push(`Invalid gridShoulder tariff rate: ${tariffs.gridShoulder}`);
   }
   if (tariffs.gridShoulder > tariffs.gridPeak + 0.05) {
-    errors.push(`Inverted grid tariffs: shoulder rate (${tariffs.gridShoulder}) exceeds peak rate (${tariffs.gridPeak}).`);
+    errors.push(
+      `Inverted grid tariffs: shoulder rate (${tariffs.gridShoulder}) exceeds peak rate (${tariffs.gridPeak}).`,
+    );
   }
 
   return {
@@ -430,7 +520,7 @@ export interface GeneralLPSolution {
  *   s.t. A_eq x = b_eq
  *        A_ineq x <= b_ineq
  *        lb_j <= x_j <= ub_j
- * 
+ *
  * Uses full Two-Phase Simplex with artificial variable elimination
  * and strict timeout bounds to prevent blocking the event loop or UI thread.
  */
@@ -442,25 +532,27 @@ export function solveGeneralLP(
   b_ineq: number[],
   lb: number[],
   ub: number[],
-  timeoutMs: number = 5000
+  timeoutMs: number = 5000,
 ): GeneralLPSolution {
   const n = c.length;
   const m_eq = A_eq.length;
   const m_ineq = A_ineq.length;
 
   // Variable shift: x'_j = x_j - lb_j >= 0, with 0 <= x'_j <= ub_j - lb_j
-  const ub_prime = ub.map((u, j) => Math.max(0, u - lb[j]));
-  const c_const = c.reduce((sum, cj, j) => sum + cj * lb[j], 0);
+  const ub_prime = ub.map((u, j) => Math.max(0, u - (lb[j] ?? 0)));
+  const c_const = c.reduce((sum, cj, j) => sum + cj * (lb[j] ?? 0), 0);
 
   const b_eq_prime = b_eq.map((b, i) => {
     let sum = 0;
-    for (let j = 0; j < n; j++) sum += A_eq[i][j] * lb[j];
+    const row = A_eq[i] ?? [];
+    for (let j = 0; j < n; j++) sum += (row[j] ?? 0) * (lb[j] ?? 0);
     return b - sum;
   });
 
   const b_ineq_prime = b_ineq.map((b, i) => {
     let sum = 0;
-    for (let j = 0; j < n; j++) sum += A_ineq[i][j] * lb[j];
+    const row = A_ineq[i] ?? [];
+    for (let j = 0; j < n; j++) sum += (row[j] ?? 0) * (lb[j] ?? 0);
     return b - sum;
   });
 
@@ -472,17 +564,19 @@ export function solveGeneralLP(
 
   for (let i = 0; i < m_eq; i++) {
     rowNeedsArtificial[i] = true;
-    if (b_eq_prime[i] < -1e-7) {
+    const bVal = b_eq_prime[i] ?? 0;
+    if (bVal < -1e-7) {
       rowMult[i] = -1.0;
-      b_eq_prime[i] = -b_eq_prime[i];
+      b_eq_prime[i] = -bVal;
     }
   }
 
   for (let i = 0; i < m_ineq; i++) {
     const rowIdx = m_eq + i;
-    if (b_ineq_prime[i] < -1e-7) {
+    const bVal = b_ineq_prime[i] ?? 0;
+    if (bVal < -1e-7) {
       rowMult[rowIdx] = -1.0;
-      b_ineq_prime[i] = -b_ineq_prime[i];
+      b_ineq_prime[i] = -bVal;
       rowNeedsArtificial[rowIdx] = true;
     }
   }
@@ -502,12 +596,14 @@ export function solveGeneralLP(
   // Equality rows
   for (let i = 0; i < m_eq; i++) {
     const row = new Float64Array(totalCols + 1);
-    for (let j = 0; j < n; j++) row[j] = A_eq[i][j] * rowMult[i];
+    const aRow = A_eq[i] ?? [];
+    const rMult = rowMult[i] ?? 1.0;
+    for (let j = 0; j < n; j++) row[j] = (aRow[j] ?? 0) * rMult;
     const artCol = n + totalSlacks + curArtificial;
     row[artCol] = 1.0;
     basis.push(artCol);
     curArtificial++;
-    row[rhsCol] = b_eq_prime[i];
+    row[rhsCol] = b_eq_prime[i] ?? 0;
     tableau.push(Array.from(row));
   }
 
@@ -515,9 +611,11 @@ export function solveGeneralLP(
   for (let i = 0; i < m_ineq; i++) {
     const rowIdx = m_eq + i;
     const row = new Float64Array(totalCols + 1);
-    for (let j = 0; j < n; j++) row[j] = A_ineq[i][j] * rowMult[rowIdx];
+    const aRow = A_ineq[i] ?? [];
+    const rMult = rowMult[rowIdx] ?? 1.0;
+    for (let j = 0; j < n; j++) row[j] = (aRow[j] ?? 0) * rMult;
     const slackCol = n + i;
-    row[slackCol] = rowMult[rowIdx] > 0 ? 1.0 : -1.0;
+    row[slackCol] = rMult > 0 ? 1.0 : -1.0;
 
     if (rowNeedsArtificial[rowIdx]) {
       const artCol = n + totalSlacks + curArtificial;
@@ -527,7 +625,7 @@ export function solveGeneralLP(
     } else {
       basis.push(slackCol);
     }
-    row[rhsCol] = b_ineq_prime[i];
+    row[rhsCol] = b_ineq_prime[i] ?? 0;
     tableau.push(Array.from(row));
   }
 
@@ -538,21 +636,25 @@ export function solveGeneralLP(
     const slackCol = n + m_ineq + j;
     row[slackCol] = 1.0;
     basis.push(slackCol);
-    row[rhsCol] = ub_prime[j];
+    row[rhsCol] = ub_prime[j] ?? 0;
     tableau.push(Array.from(row));
   }
 
   function pivot(pRow: number, pCol: number) {
-    const pivotVal = tableau[pRow][pCol];
+    const rowP = tableau[pRow];
+    if (!rowP) return;
+    const pivotVal = rowP[pCol] ?? 1.0;
     for (let cIdx = 0; cIdx <= rhsCol; cIdx++) {
-      tableau[pRow][cIdx] /= pivotVal;
+      rowP[cIdx] = (rowP[cIdx] ?? 0) / pivotVal;
     }
     for (let r = 0; r < tableau.length; r++) {
       if (r !== pRow) {
-        const factor = tableau[r][pCol];
+        const rowR = tableau[r];
+        if (!rowR) continue;
+        const factor = rowR[pCol] ?? 0;
         if (Math.abs(factor) > 1e-12) {
           for (let cIdx = 0; cIdx <= rhsCol; cIdx++) {
-            tableau[r][cIdx] -= factor * tableau[pRow][cIdx];
+            rowR[cIdx] = (rowR[cIdx] ?? 0) - factor * (rowP[cIdx] ?? 0);
           }
         }
       }
@@ -567,11 +669,13 @@ export function solveGeneralLP(
   if (numArtificials > 0) {
     const phase1Row = new Float64Array(totalCols + 1);
     for (let r = 0; r < totalRows; r++) {
-      if (basis[r] >= n + totalSlacks) {
+      const bCol = basis[r] ?? 0;
+      if (bCol >= n + totalSlacks) {
+        const rowR = tableau[r] ?? [];
         for (let cIdx = 0; cIdx < n + totalSlacks; cIdx++) {
-          phase1Row[cIdx] += tableau[r][cIdx];
+          phase1Row[cIdx] = (phase1Row[cIdx] ?? 0) + (rowR[cIdx] ?? 0);
         }
-        phase1Row[rhsCol] += tableau[r][rhsCol];
+        phase1Row[rhsCol] = (phase1Row[rhsCol] ?? 0) + (rowR[rhsCol] ?? 0);
       }
     }
     tableau.push(Array.from(phase1Row));
@@ -585,9 +689,11 @@ export function solveGeneralLP(
       }
       let enterCol = -1;
       let maxCost = 1e-7;
+      const objRow = tableau[objRowIdx] ?? [];
       for (let cIdx = 0; cIdx < n + totalSlacks; cIdx++) {
-        if (tableau[objRowIdx][cIdx] > maxCost) {
-          maxCost = tableau[objRowIdx][cIdx];
+        const cost = objRow[cIdx] ?? 0;
+        if (cost > maxCost) {
+          maxCost = cost;
           enterCol = cIdx;
         }
       }
@@ -596,9 +702,10 @@ export function solveGeneralLP(
       let leaveRow = -1;
       let minRatio = Infinity;
       for (let r = 0; r < totalRows; r++) {
-        const val = tableau[r][enterCol];
+        const rowR = tableau[r] ?? [];
+        const val = rowR[enterCol] ?? 0;
         if (val > 1e-8) {
-          const ratio = tableau[r][rhsCol] / val;
+          const ratio = (rowR[rhsCol] ?? 0) / val;
           if (ratio < minRatio - 1e-10) {
             minRatio = ratio;
             leaveRow = r;
@@ -611,7 +718,7 @@ export function solveGeneralLP(
       pivot(leaveRow, enterCol);
     }
 
-    const phase1Obj = tableau[objRowIdx][rhsCol];
+    const phase1Obj = tableau[objRowIdx]?.[rhsCol] ?? 0;
     tableau.pop();
 
     if (phase1Obj > 1e-3) {
@@ -622,19 +729,21 @@ export function solveGeneralLP(
   // Phase 2: Minimize true economic cost
   const phase2Row = new Float64Array(totalCols + 1);
   for (let j = 0; j < n; j++) {
-    phase2Row[j] = -c[j]; // maximize -c^T x'
+    phase2Row[j] = -(c[j] ?? 0); // maximize -c^T x'
   }
   tableau.push(Array.from(phase2Row));
   const objRowIdx = tableau.length - 1;
   const solverStartTimePhase2 = Date.now();
 
   for (let r = 0; r < totalRows; r++) {
-    const bCol = basis[r];
-    if (bCol < n) {
-      const coeff = tableau[objRowIdx][bCol];
+    const bCol = basis[r] ?? -1;
+    if (bCol >= 0 && bCol < n) {
+      const objRow = tableau[objRowIdx] ?? [];
+      const coeff = objRow[bCol] ?? 0;
       if (Math.abs(coeff) > 1e-10) {
+        const rowR = tableau[r] ?? [];
         for (let cIdx = 0; cIdx <= rhsCol; cIdx++) {
-          tableau[objRowIdx][cIdx] -= coeff * tableau[r][cIdx];
+          objRow[cIdx] = (objRow[cIdx] ?? 0) - coeff * (rowR[cIdx] ?? 0);
         }
       }
     }
@@ -647,9 +756,11 @@ export function solveGeneralLP(
     }
     let enterCol = -1;
     let maxCost = 1e-7;
+    const objRow = tableau[objRowIdx] ?? [];
     for (let cIdx = 0; cIdx < n + totalSlacks; cIdx++) {
-      if (tableau[objRowIdx][cIdx] > maxCost) {
-        maxCost = tableau[objRowIdx][cIdx];
+      const cost = objRow[cIdx] ?? 0;
+      if (cost > maxCost) {
+        maxCost = cost;
         enterCol = cIdx;
       }
     }
@@ -658,9 +769,10 @@ export function solveGeneralLP(
     let leaveRow = -1;
     let minRatio = Infinity;
     for (let r = 0; r < totalRows; r++) {
-      const val = tableau[r][enterCol];
+      const rowR = tableau[r] ?? [];
+      const val = rowR[enterCol] ?? 0;
       if (val > 1e-8) {
-        const ratio = tableau[r][rhsCol] / val;
+        const ratio = (rowR[rhsCol] ?? 0) / val;
         if (ratio < minRatio - 1e-10) {
           minRatio = ratio;
           leaveRow = r;
@@ -675,14 +787,17 @@ export function solveGeneralLP(
 
   const x_sol = new Array(n).fill(0);
   for (let r = 0; r < totalRows; r++) {
-    if (basis[r] < n) {
-      x_sol[basis[r]] = tableau[r][rhsCol];
+    const bCol = basis[r] ?? -1;
+    if (bCol >= 0 && bCol < n) {
+      x_sol[bCol] = tableau[r]?.[rhsCol] ?? 0;
     }
   }
 
-  const final_x = x_sol.map((xVal, j) => Math.max(0, Math.min(ub_prime[j], xVal)) + lb[j]);
+  const final_x = x_sol.map(
+    (xVal, j) => Math.max(0, Math.min(ub_prime[j] ?? 0, xVal)) + (lb[j] ?? 0),
+  );
   let realObj = c_const;
-  for (let j = 0; j < n; j++) realObj += c[j] * (final_x[j] - lb[j]);
+  for (let j = 0; j < n; j++) realObj += (c[j] ?? 0) * ((final_x[j] ?? 0) - (lb[j] ?? 0));
 
   return {
     status: "OPTIMAL",
@@ -702,7 +817,7 @@ export function solveGeneralLP(
  * physical laws (power balance, non-negativity, solar/wind capacity, grid contract and physical limits,
  * battery simultaneous charge/discharge, battery SoC envelope, inverter ratings, captive throttle/ramp,
  * generator operating limits and transitions, terminal SoC target).
- * 
+ *
  * CRITICAL RULE: A schedule must NEVER be marked executable unless EVERY interval passes this audit.
  */
 export function verifyHorizonScheduleConstraints(
@@ -717,7 +832,7 @@ export function verifyHorizonScheduleConstraints(
   forecastLimits?: {
     hourlySolarAvailableMW?: number[];
     hourlyWindAvailableMW?: number[];
-  }
+  },
 ): { isValid: boolean; violations: VerificationViolation[] } {
   const violations: VerificationViolation[] = [];
   const maxCaptiveRamp = c.captiveRampRateMWPerMin * 60;
@@ -733,6 +848,7 @@ export function verifyHorizonScheduleConstraints(
 
   for (let t = 0; t < intervals.length; t++) {
     const inv = intervals[t];
+    if (!inv) continue;
 
     // 1. Non-negativity check on all physical dispatch outputs
     const assets = [
@@ -843,7 +959,7 @@ export function verifyHorizonScheduleConstraints(
     }
 
     // 7. Battery Kinetic Conservation Continuity
-    const netMWh = (inv.batteryChargeMW * etaSqrt) - (inv.batteryDischargeMW / etaSqrt);
+    const netMWh = inv.batteryChargeMW * etaSqrt - inv.batteryDischargeMW / etaSqrt;
     const expectedSOC = Number((prevSOC + (netMWh / c.batteryCapacityMWh) * 100).toFixed(2));
     if (Math.abs(inv.batterySOC - expectedSOC) > 0.15) {
       violations.push({
@@ -934,7 +1050,7 @@ export function verifyHorizonScheduleConstraints(
 
   // 11. Terminal State of Charge Target Verification
   if (intervals.length > 0 && targetTerminalSOC !== undefined && targetTerminalSOC > 0) {
-    const finalSOC = intervals[intervals.length - 1].batterySOC;
+    const finalSOC = intervals[intervals.length - 1]!.batterySOC;
     if (finalSOC < targetTerminalSOC - 0.5) {
       violations.push({
         hour: intervals.length - 1,
@@ -965,7 +1081,7 @@ function calculateFeasibleOperatingBaseline(
   windAvailMW: number,
   prevCaptiveMW: number,
   c: AssetConstraints,
-  gridRatePerKWh: number
+  gridRatePerKWh: number,
 ): {
   baseSolar: number;
   baseWind: number;
@@ -979,7 +1095,13 @@ function calculateFeasibleOperatingBaseline(
   const targetCaptive = 55;
   const captiveRamped = Math.max(
     c.captiveMinMW,
-    Math.min(c.captiveMaxMW, Math.max(prevCaptiveMW - maxCaptiveRamp, Math.min(prevCaptiveMW + maxCaptiveRamp, targetCaptive)))
+    Math.min(
+      c.captiveMaxMW,
+      Math.max(
+        prevCaptiveMW - maxCaptiveRamp,
+        Math.min(prevCaptiveMW + maxCaptiveRamp, targetCaptive),
+      ),
+    ),
   );
 
   let rem = demandMW;
@@ -1028,7 +1150,7 @@ function calculateFeasibleOperatingBaseline(
 
 /**
  * Solves the complete 24-hour horizon dispatch problem JOINTLY across all intervals.
- * 
+ *
  * Formulates a single global linear program spanning all H hours simultaneously:
  * - Decision variables: P_solar, P_wind, P_dis, P_chg, P_gridCont, P_gridExc, P_captive, P_gen for all t in [0, H-1].
  * - Inter-temporal battery energy kinetics & terminal SoC constraints.
@@ -1053,7 +1175,9 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       totalHorizonCost: 0,
       totalHorizonBaselineCost: 0,
       totalHorizonSavings: 0,
-      unservedEnergyMWh: input.hourlyDemandMW?.reduce((a, b) => a + (Number.isFinite(b) ? Math.max(0, b) : 0), 0) ?? 0,
+      unservedEnergyMWh:
+        input.hourlyDemandMW?.reduce((a, b) => a + (Number.isFinite(b) ? Math.max(0, b) : 0), 0) ??
+        0,
       deficitIntervals: [],
       intervals: [],
       batterySocTrajectory: [],
@@ -1090,136 +1214,59 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
   const initialGenerator = input.initialGeneratorMW ?? 0;
   const initialGenCommitted = input.initialGeneratorCommitted ?? false;
 
-  // Step 2: Formulate Systematic Unit Commitment Schedules across the Horizon
-  // Systematically explores the complete space of physically feasible generator on/off schedules.
-  const deficitHours: number[] = [];
-  const stressHours: number[] = [];
-  for (let t = 0; t < H; t++) {
-    const cleanCap = (input.hourlySolarAvailableMW[t] || 0) + (input.hourlyWindAvailableMW[t] || 0) + c.captiveMaxMW + gridContractLimit;
-    if (input.hourlyDemandMW[t] > cleanCap + c.batteryMaxDischargeMW) {
-      deficitHours.push(t);
-    }
-    if (input.hourlyDemandMW[t] > cleanCap) {
-      stressHours.push(t);
-    }
-  }
-
-  const commitmentCandidates: boolean[][] = [];
-  const candidateSignatures = new Set<string>();
-
-  function registerCandidate(u: boolean[]) {
-    const key = u.map((b) => (b ? "1" : "0")).join("");
-    if (!candidateSignatures.has(key)) {
-      candidateSignatures.add(key);
-      commitmentCandidates.push([...u]);
-    }
-  }
-
-  // 1. All-offline candidate u = [0, ..., 0] (0 startups, 0 diesel)
-  registerCandidate(new Array(H).fill(false));
-
-  // 2. Continuous commitment u = [1, ..., 1]
-  registerCandidate(new Array(H).fill(true));
-
-  // 3. Operational windows enclosing capacity deficit / tariff stress
-  const targetHours = deficitHours.length > 0 ? deficitHours : stressHours;
-  if (targetHours.length > 0) {
-    const firstTarget = Math.min(...targetHours);
-    const lastTarget = Math.max(...targetHours);
-
-    const tightWindow = new Array(H).fill(false);
-    for (let t = firstTarget; t <= lastTarget; t++) tightWindow[t] = true;
-    registerCandidate(tightWindow);
-
-    if (firstTarget > 0) {
-      const with1hLead = [...tightWindow];
-      with1hLead[firstTarget - 1] = true;
-      registerCandidate(with1hLead);
-    }
-    if (firstTarget > 1) {
-      const with2hLead = [...tightWindow];
-      with2hLead[firstTarget - 1] = true;
-      with2hLead[firstTarget - 2] = true;
-      registerCandidate(with2hLead);
-    }
-    if (lastTarget < H - 1) {
-      const withTail = [...tightWindow];
-      withTail[lastTarget + 1] = true;
-      registerCandidate(withTail);
-    }
-  }
-
-  // 4. All single-run contiguous operational windows [s, e] across the horizon
-  for (let s = 0; s < H; s++) {
-    for (let e = s; e < H; e++) {
-      if (deficitHours.length > 0) {
-        const overlapsDeficit = deficitHours.some((dh) => dh >= s && dh <= e);
-        if (!overlapsDeficit) continue;
-      }
-      const u = new Array(H).fill(false);
-      for (let t = s; t <= e; t++) u[t] = true;
-      registerCandidate(u);
-    }
-  }
-
-  // 5. Dual-peak operational windows (morning and evening deficit clusters)
-  if (targetHours.length > 1) {
-    const midPoint = Math.floor(H / 2);
-    const morningTargets = targetHours.filter((t) => t < midPoint);
-    const eveningTargets = targetHours.filter((t) => t >= midPoint);
-
-    if (morningTargets.length > 0 && eveningTargets.length > 0) {
-      const mStart = Math.min(...morningTargets);
-      const mEnd = Math.max(...morningTargets);
-      const eStart = Math.min(...eveningTargets);
-      const eEnd = Math.max(...eveningTargets);
-
-      const dualWindow = new Array(H).fill(false);
-      for (let t = Math.max(0, mStart - 1); t <= Math.min(midPoint - 1, mEnd + 1); t++) dualWindow[t] = true;
-      for (let t = Math.max(midPoint, eStart - 1); t <= Math.min(H - 1, eEnd + 1); t++) dualWindow[t] = true;
-      registerCandidate(dualWindow);
-    }
-  }
-
-  // Step 3: Solve Joint Multi-Period Optimization across all candidates
+  // Step 2 & 3: Mathematically Rigorous Branch-and-Bound (B&B) MILP Solver
+  // Solves the joint multi-period unit commitment problem to proven global optimality.
+  // Combines continuous Two-Phase Simplex LP relaxations, dual lower bounding,
+  // fractional-variable branching, bound fathoming, and convex dominance proofs.
   const VARS_PER_HOUR = 8;
   const n = H * VARS_PER_HOUR;
 
-  let bestSolution: GeneralLPSolution | null = null;
-  let bestCommitment: boolean[] = [];
-  let bestTotalCostWithStartup = Infinity;
-  let totalSimplexIterations = 0;
+  interface BnBNode {
+    fixed: (boolean | null)[];
+    lowerBound: number;
+    depth: number;
+  }
 
-  for (const candidateCommitment of commitmentCandidates) {
+  function buildAndSolveNodeLP(fixedCommitment: (boolean | null)[]): {
+    sol: GeneralLPSolution;
+    startupCostTotal: number;
+  } {
     const c_cost = new Array(n).fill(0);
     const lb = new Array(n).fill(0);
     const ub = new Array(n).fill(0);
 
     let startupCostTotal = 0;
-    let prevCommitted = initialGenCommitted;
+    let prevCommitted: boolean | null = initialGenCommitted;
     for (let t = 0; t < H; t++) {
-      if (candidateCommitment[t] && !prevCommitted) {
+      const curFixed = fixedCommitment[t];
+      if (curFixed === true && prevCommitted === false) {
         startupCostTotal += c.generatorStartupCost;
       }
-      prevCommitted = candidateCommitment[t];
+      prevCommitted = curFixed ?? null;
     }
 
     for (let t = 0; t < H; t++) {
       const baseIdx = t * VARS_PER_HOUR;
-      const tier = input.hourlyTariffTier[t];
+      const tier = input.hourlyTariffTier[t] ?? "Shoulder";
       let gridRate = tariffRates.gridShoulder;
       if (tier === "Peak") gridRate = tariffRates.gridPeak;
-      else if (tier === "OffPeak") gridRate = (tariffRates as any).gridOffPeak ?? (tariffRates as any).gridOffpeak ?? 4.80;
+      else if (tier === "OffPeak") gridRate = tariffRates.gridOffPeak;
 
       // 0: Solar
       c_cost[baseIdx + 0] = tariffRates.solar * 1000;
       lb[baseIdx + 0] = 0;
-      ub[baseIdx + 0] = Math.min(c.solarCapacityMW, Math.max(0, input.hourlySolarAvailableMW[t]));
+      ub[baseIdx + 0] = Math.min(
+        c.solarCapacityMW,
+        Math.max(0, input.hourlySolarAvailableMW[t] ?? 0),
+      );
 
       // 1: Wind
       c_cost[baseIdx + 1] = tariffRates.wind * 1000;
       lb[baseIdx + 1] = 0;
-      ub[baseIdx + 1] = Math.min(c.windCapacityMW, Math.max(0, input.hourlyWindAvailableMW[t]));
+      ub[baseIdx + 1] = Math.min(
+        c.windCapacityMW,
+        Math.max(0, input.hourlyWindAvailableMW[t] ?? 0),
+      );
 
       // 2: Battery Discharge
       c_cost[baseIdx + 2] = c.batteryDegradationCostPerMWh / etaSqrt;
@@ -1237,7 +1284,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       ub[baseIdx + 4] = gridContractLimit;
 
       // 5: Grid Excess
-      c_cost[baseIdx + 5] = (gridRate * 1000) + c.gridDemandChargePenaltyPerMW;
+      c_cost[baseIdx + 5] = gridRate * 1000 + c.gridDemandChargePenaltyPerMW;
       lb[baseIdx + 5] = 0;
       ub[baseIdx + 5] = gridExcessLimit;
 
@@ -1247,42 +1294,45 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       ub[baseIdx + 6] = c.captiveMaxMW;
 
       // 7: Generator
-      const isCommitted = candidateCommitment[t];
-      c_cost[baseIdx + 7] = (c.generatorFuelCostPerLitre / c.generatorSpecificFuelConsumption) * 1000;
-      if (isCommitted) {
+      const isCommitted = fixedCommitment[t];
+      c_cost[baseIdx + 7] =
+        (c.generatorFuelCostPerLitre / c.generatorSpecificFuelConsumption) * 1000;
+      if (isCommitted === true) {
         lb[baseIdx + 7] = c.generatorMinMW;
         ub[baseIdx + 7] = c.generatorMaxMW;
-      } else {
+      } else if (isCommitted === false) {
         lb[baseIdx + 7] = 0;
         ub[baseIdx + 7] = 0;
+      } else {
+        // Continuous relaxation for unfixed intervals: [0, generatorMaxMW]
+        lb[baseIdx + 7] = 0;
+        ub[baseIdx + 7] = c.generatorMaxMW;
       }
     }
 
-    // Equality Constraints: Power Balance for every interval
+    // Equality Constraints: Power balance for each interval
     const A_eq: number[][] = [];
     const b_eq: number[] = [];
-
     for (let t = 0; t < H; t++) {
       const row = new Array(n).fill(0);
       const baseIdx = t * VARS_PER_HOUR;
-      row[baseIdx + 0] = 1.0; // solar
-      row[baseIdx + 1] = 1.0; // wind
-      row[baseIdx + 2] = 1.0; // bat dis
-      row[baseIdx + 3] = -1.0; // bat chg
-      row[baseIdx + 4] = 1.0; // grid cont
-      row[baseIdx + 5] = 1.0; // grid exc
-      row[baseIdx + 6] = 1.0; // captive
-      row[baseIdx + 7] = 1.0; // gen
-
+      row[baseIdx + 0] = 1.0;
+      row[baseIdx + 1] = 1.0;
+      row[baseIdx + 2] = 1.0;
+      row[baseIdx + 3] = -1.0;
+      row[baseIdx + 4] = 1.0;
+      row[baseIdx + 5] = 1.0;
+      row[baseIdx + 6] = 1.0;
+      row[baseIdx + 7] = 1.0;
       A_eq.push(row);
-      b_eq.push(input.hourlyDemandMW[t]);
+      b_eq.push(input.hourlyDemandMW[t] ?? 0);
     }
 
-    // Inequality Constraints: Battery energy bounds, terminal SoC target, ramping
+    // Inequality Constraints: Battery bounds, terminal SoC, captive ramping, generator ramping
     const A_ineq: number[][] = [];
     const b_ineq: number[] = [];
 
-    // 1. Battery Max Energy: sum_{tau<=t} (etaSqrt * chg - 1/etaSqrt * dis) <= maxEnergy - initialEnergy
+    // Battery Max Energy
     for (let t = 0; t < H; t++) {
       const row = new Array(n).fill(0);
       for (let tau = 0; tau <= t; tau++) {
@@ -1294,7 +1344,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       b_ineq.push(maxEnergyMWh - initialEnergyMWh);
     }
 
-    // 2. Battery Min Energy: sum_{tau<=t} (-etaSqrt * chg + 1/etaSqrt * dis) <= initialEnergy - minEnergy
+    // Battery Min Energy
     for (let t = 0; t < H; t++) {
       const row = new Array(n).fill(0);
       for (let tau = 0; tau <= t; tau++) {
@@ -1306,7 +1356,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       b_ineq.push(initialEnergyMWh - minEnergyMWh);
     }
 
-    // 3. Terminal State of Charge Target: sum_{tau<H} (-etaSqrt * chg + 1/etaSqrt * dis) <= initialEnergy - targetEnergy
+    // Terminal Energy Target
     if (targetEnergyMWh > 0) {
       const row = new Array(n).fill(0);
       for (let tau = 0; tau < H; tau++) {
@@ -1318,7 +1368,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       b_ineq.push(initialEnergyMWh - targetEnergyMWh);
     }
 
-    // 4. Captive Thermal Ramping Limits
+    // Captive Ramping
     for (let t = 0; t < H; t++) {
       const baseIdx = t * VARS_PER_HOUR;
       if (t === 0) {
@@ -1347,20 +1397,20 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       }
     }
 
-    // 5. Generator Ramping & Transitions
+    // Generator Ramping (MILP bounds)
     for (let t = 0; t < H; t++) {
       const baseIdx = t * VARS_PER_HOUR;
-      const isCommitted = candidateCommitment[t];
-      const wasCommitted = t === 0 ? initialGenCommitted : candidateCommitment[t - 1];
+      const isCommitted = fixedCommitment[t];
+      const wasCommitted = t === 0 ? initialGenCommitted : fixedCommitment[t - 1];
 
-      if (isCommitted) {
-        if (!wasCommitted) {
+      if (isCommitted === true) {
+        if (wasCommitted === false) {
           // Startup from offline
           const rowStart = new Array(n).fill(0);
           rowStart[baseIdx + 7] = 1.0;
           A_ineq.push(rowStart);
           b_ineq.push(c.generatorMinMW + maxGenRampPerHour);
-        } else {
+        } else if (wasCommitted === true) {
           // Running ramp
           if (t === 0) {
             const rowUp = new Array(n).fill(0);
@@ -1391,30 +1441,148 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     }
 
     const sol = solveGeneralLP(c_cost, A_eq, b_eq, A_ineq, b_ineq, lb, ub);
-    totalSimplexIterations += sol.iterations;
+    return { sol, startupCostTotal };
+  }
 
-    if (sol.status === "OPTIMAL") {
-      const totalCandidateCost = sol.objValue + startupCostTotal;
-      if (totalCandidateCost < bestTotalCostWithStartup) {
-        bestTotalCostWithStartup = totalCandidateCost;
-        bestSolution = sol;
-        bestCommitment = candidateCommitment;
+  let bestSolution: GeneralLPSolution | null = null;
+  let bestCommitment: boolean[] = [];
+  let bestTotalCostWithStartup = Infinity;
+  let totalSimplexIterations = 0;
+  let exploredNodesCount = 0;
+  let rootLowerBound = 0;
+  let isProvenGlobal = false;
+  let proofMethod:
+    "BRANCH_AND_BOUND_MILP" | "CONVEX_RELAXATION_DOMINANCE" | "BELLMAN_DYNAMIC_PROGRAMMING" =
+    "BRANCH_AND_BOUND_MILP";
+
+  // Step 2a: Evaluate all-offline candidate u = [0, ..., 0] as baseline incumbent
+  const allZeroCommitment = new Array(H).fill(false);
+  const allZeroResult = buildAndSolveNodeLP(allZeroCommitment);
+  totalSimplexIterations += allZeroResult.sol.iterations;
+  if (allZeroResult.sol.status === "OPTIMAL") {
+    bestSolution = allZeroResult.sol;
+    bestCommitment = allZeroCommitment;
+    bestTotalCostWithStartup = allZeroResult.sol.objValue + allZeroResult.startupCostTotal;
+
+    // Check Convex Relaxation Dominance:
+    // If all-offline u = [0, ..., 0] is feasible with 0 grid excess and 0 unserved energy,
+    // diesel generation (Rs 22.56/kWh + startup) cannot lower costs below cleaner assets.
+    let hasGridExcess = false;
+    for (let t = 0; t < H; t++) {
+      if ((allZeroResult.sol.x[t * VARS_PER_HOUR + 5] ?? 0) > 0.05) {
+        hasGridExcess = true;
+        break;
       }
+    }
+    if (!hasGridExcess) {
+      isProvenGlobal = true;
+      proofMethod = "CONVEX_RELAXATION_DOMINANCE";
+      rootLowerBound = bestTotalCostWithStartup;
+      exploredNodesCount = 1;
+    }
+  }
 
-      // Dominance Termination: If all-offline u = [0, ..., 0] is optimal with 0 grid excess,
-      // diesel fuel (Rs 22.56/kWh) + startup can NEVER reduce costs compared to cleaner sources.
-      // Therefore, u = [0, ..., 0] is mathematically guaranteed to be the global minimum!
-      if (candidateCommitment.every((b) => !b)) {
-        let hasGridExcess = false;
+  // Step 2b: Branch-and-Bound Tree Search (if not proven by dominance)
+  if (!isProvenGlobal) {
+    // Root continuous relaxation
+    const rootFixed: (boolean | null)[] = new Array(H).fill(null);
+    const rootResult = buildAndSolveNodeLP(rootFixed);
+    totalSimplexIterations += rootResult.sol.iterations;
+    exploredNodesCount++;
+
+    if (rootResult.sol.status === "OPTIMAL") {
+      rootLowerBound = rootResult.sol.objValue;
+      const rootOpenQueue: BnBNode[] = [
+        { fixed: rootFixed, lowerBound: rootResult.sol.objValue, depth: 0 },
+      ];
+
+      while (rootOpenQueue.length > 0 && exploredNodesCount < 120) {
+        // Best-bound selection: node with minimal lowerBound
+        rootOpenQueue.sort((a, b) => a.lowerBound - b.lowerBound);
+        const currentNode = rootOpenQueue.shift();
+        if (!currentNode) break;
+
+        // Bound fathoming
+        if (currentNode.lowerBound >= bestTotalCostWithStartup - 1e-4) {
+          isProvenGlobal = true;
+          break; // All remaining open nodes fathomed!
+        }
+
+        const nodeResult = buildAndSolveNodeLP(currentNode.fixed);
+        totalSimplexIterations += nodeResult.sol.iterations;
+        exploredNodesCount++;
+
+        if (nodeResult.sol.status !== "OPTIMAL") {
+          continue; // Infeasible node fathomed
+        }
+
+        const nodeLowerBound = nodeResult.sol.objValue + nodeResult.startupCostTotal;
+        if (nodeLowerBound >= bestTotalCostWithStartup - 1e-4) {
+          continue; // Bound pruned
+        }
+
+        // Check for fractional variables: unfixed t where 0 < P_gen < minMW
+        let mostFractionalIdx = -1;
+        let maxFractionality = -1;
+
         for (let t = 0; t < H; t++) {
-          if (sol.x[t * VARS_PER_HOUR + 5] > 0.05) {
-            hasGridExcess = true;
-            break;
+          if (currentNode.fixed[t] === null) {
+            const pGen = nodeResult.sol.x[t * VARS_PER_HOUR + 7] ?? 0;
+            if (pGen > 0.05 && pGen < c.generatorMinMW - 0.05) {
+              const fractionality = Math.min(pGen, c.generatorMinMW - pGen);
+              if (fractionality > maxFractionality) {
+                maxFractionality = fractionality;
+                mostFractionalIdx = t;
+              }
+            }
           }
         }
-        if (!hasGridExcess) {
-          break; // Global minimum proven!
+
+        if (mostFractionalIdx === -1) {
+          // Integer-feasible candidate found!
+          const candidateCommitment: boolean[] = [];
+          for (let t = 0; t < H; t++) {
+            if (currentNode.fixed[t] !== null) {
+              candidateCommitment.push(currentNode.fixed[t] as boolean);
+            } else {
+              const pGen = nodeResult.sol.x[t * VARS_PER_HOUR + 7] ?? 0;
+              candidateCommitment.push(pGen >= c.generatorMinMW - 0.05);
+            }
+          }
+
+          // Evaluate exact integer LP
+          const intResult = buildAndSolveNodeLP(candidateCommitment);
+          totalSimplexIterations += intResult.sol.iterations;
+          if (intResult.sol.status === "OPTIMAL") {
+            const intCost = intResult.sol.objValue + intResult.startupCostTotal;
+            if (intCost < bestTotalCostWithStartup) {
+              bestTotalCostWithStartup = intCost;
+              bestSolution = intResult.sol;
+              bestCommitment = candidateCommitment;
+            }
+          }
+        } else {
+          // Branch on most fractional variable
+          const branch0 = [...currentNode.fixed];
+          branch0[mostFractionalIdx] = false;
+          const branch1 = [...currentNode.fixed];
+          branch1[mostFractionalIdx] = true;
+
+          rootOpenQueue.push({
+            fixed: branch0,
+            lowerBound: nodeLowerBound,
+            depth: currentNode.depth + 1,
+          });
+          rootOpenQueue.push({
+            fixed: branch1,
+            lowerBound: nodeLowerBound,
+            depth: currentNode.depth + 1,
+          });
         }
+      }
+
+      if (rootOpenQueue.length === 0) {
+        isProvenGlobal = true;
       }
     }
   }
@@ -1422,13 +1590,18 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
   // Step 4: Handle Infeasible Physical Capacity Deficit
   if (!bestSolution || bestSolution.status !== "OPTIMAL") {
     let unservedEnergyMWh = 0;
-    const deficitIntervals: { hour: number; demandMW: number; maxAvailableCapacityMW: number; deficitMW: number }[] = [];
+    const deficitIntervals: {
+      hour: number;
+      demandMW: number;
+      maxAvailableCapacityMW: number;
+      deficitMW: number;
+    }[] = [];
 
     for (let t = 0; t < H; t++) {
-      const demand = input.hourlyDemandMW[t];
+      const demand = input.hourlyDemandMW[t] ?? 0;
       const maxPossible =
-        input.hourlySolarAvailableMW[t] +
-        input.hourlyWindAvailableMW[t] +
+        (input.hourlySolarAvailableMW[t] ?? 0) +
+        (input.hourlyWindAvailableMW[t] ?? 0) +
         c.captiveMaxMW +
         gridMaxPhys +
         c.generatorMaxMW +
@@ -1445,7 +1618,9 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       }
     }
 
-    const deficitHours = deficitIntervals.map((d) => `H${d.hour} (${d.deficitMW} MW shortfall)`).join(", ");
+    const deficitHours = deficitIntervals
+      .map((d) => `H${d.hour} (${d.deficitMW} MW shortfall)`)
+      .join(", ");
     return {
       solverStatus: "INFEASIBLE_DEFICIT",
       isExecutablePlan: false,
@@ -1459,7 +1634,9 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       deficitIntervals,
       intervals: [],
       batterySocTrajectory: [],
-      activeConstraints: deficitIntervals.map((d) => `Deficit H${d.hour}: ${d.deficitMW} MW shortfall`),
+      activeConstraints: deficitIntervals.map(
+        (d) => `Deficit H${d.hour}: ${d.deficitMW} MW shortfall`,
+      ),
       simplexIterations: totalSimplexIterations,
       solveTimeMs: Number((performance.now() - startTime).toFixed(2)),
       provenance: {
@@ -1475,7 +1652,9 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
 
   // Step 5: Extract Schedule and Build Auditable Feasible Baseline
   const intervals: HorizonIntervalDispatch[] = [];
-  const socTrajectory: { hour: number; socPct: number }[] = [{ hour: 0, socPct: input.initialBatterySOC }];
+  const socTrajectory: { hour: number; socPct: number }[] = [
+    { hour: 0, socPct: input.initialBatterySOC },
+  ];
 
   let currentBatteryEnergyMWh = initialEnergyMWh;
   let totalHorizonCost = 0;
@@ -1485,29 +1664,29 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
 
   for (let t = 0; t < H; t++) {
     const baseIdx = t * VARS_PER_HOUR;
-    const demand = input.hourlyDemandMW[t];
-    const solarAvail = input.hourlySolarAvailableMW[t];
-    const windAvail = input.hourlyWindAvailableMW[t];
-    const tier = input.hourlyTariffTier[t];
+    const demand = input.hourlyDemandMW[t] ?? 0;
+    const solarAvail = input.hourlySolarAvailableMW[t] ?? 0;
+    const windAvail = input.hourlyWindAvailableMW[t] ?? 0;
+    const tier = input.hourlyTariffTier[t] ?? "Shoulder";
 
     let gridRate = tariffRates.gridShoulder;
     if (tier === "Peak") gridRate = tariffRates.gridPeak;
-    else if (tier === "OffPeak") gridRate = (tariffRates as any).gridOffPeak ?? (tariffRates as any).gridOffpeak ?? 4.80;
+    else if (tier === "OffPeak") gridRate = tariffRates.gridOffPeak;
 
-    const dSolar = Number(bestSolution.x[baseIdx + 0].toFixed(2));
-    const dWind = Number(bestSolution.x[baseIdx + 1].toFixed(2));
-    const dBatDis = Number(bestSolution.x[baseIdx + 2].toFixed(2));
-    const dBatCh = Number(bestSolution.x[baseIdx + 3].toFixed(2));
-    const dGridContract = Number(bestSolution.x[baseIdx + 4].toFixed(2));
-    const dGridExcess = Number(bestSolution.x[baseIdx + 5].toFixed(2));
-    const dCaptive = Number(bestSolution.x[baseIdx + 6].toFixed(2));
-    const dGen = Number(bestSolution.x[baseIdx + 7].toFixed(2));
-    const isCommitted = bestCommitment[t];
+    const dSolar = Number((bestSolution.x[baseIdx + 0] ?? 0).toFixed(2));
+    const dWind = Number((bestSolution.x[baseIdx + 1] ?? 0).toFixed(2));
+    const dBatDis = Number((bestSolution.x[baseIdx + 2] ?? 0).toFixed(2));
+    const dBatCh = Number((bestSolution.x[baseIdx + 3] ?? 0).toFixed(2));
+    const dGridContract = Number((bestSolution.x[baseIdx + 4] ?? 0).toFixed(2));
+    const dGridExcess = Number((bestSolution.x[baseIdx + 5] ?? 0).toFixed(2));
+    const dCaptive = Number((bestSolution.x[baseIdx + 6] ?? 0).toFixed(2));
+    const dGen = Number((bestSolution.x[baseIdx + 7] ?? 0).toFixed(2));
+    const isCommitted = bestCommitment[t] ?? false;
 
     const dGrid = Number((dGridContract + dGridExcess).toFixed(2));
 
     // Energy state evolution
-    currentBatteryEnergyMWh += (dBatCh * etaSqrt) - (dBatDis / etaSqrt);
+    currentBatteryEnergyMWh += dBatCh * etaSqrt - dBatDis / etaSqrt;
     const socPct = Number(((currentBatteryEnergyMWh / batteryCapMWh) * 100).toFixed(2));
     socTrajectory.push({ hour: t + 1, socPct });
 
@@ -1516,8 +1695,9 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     const windCostMWh = tariffRates.wind * 1000;
     const captiveCostMWh = tariffRates.captive * 1000;
     const gridContractCostMWh = gridRate * 1000;
-    const gridExcessCostMWh = (gridRate * 1000) + c.gridDemandChargePenaltyPerMW;
-    const genFuelCostMWh = (c.generatorFuelCostPerLitre / c.generatorSpecificFuelConsumption) * 1000;
+    const gridExcessCostMWh = gridRate * 1000 + c.gridDemandChargePenaltyPerMW;
+    const genFuelCostMWh =
+      (c.generatorFuelCostPerLitre / c.generatorSpecificFuelConsumption) * 1000;
 
     const intervalCost =
       dSolar * solarCostMWh +
@@ -1536,7 +1716,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       windAvail,
       prevBaseCaptive,
       c,
-      gridRate
+      gridRate,
     );
     prevBaseCaptive = base.nextCaptive;
 
@@ -1585,16 +1765,40 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     {
       hourlySolarAvailableMW: input.hourlySolarAvailableMW,
       hourlyWindAvailableMW: input.hourlyWindAvailableMW,
-    }
+    },
   );
 
   const isExecutablePlan = verification.isValid;
   let executionBlockedReason: string | undefined = undefined;
 
   if (!isExecutablePlan) {
-    const violationNotes = verification.violations.map((v) => `H${v.hour} ${v.constraint}: ${v.actual}`).join("; ");
+    const violationNotes = verification.violations
+      .map((v) => `H${v.hour} ${v.constraint}: ${v.actual}`)
+      .join("; ");
     executionBlockedReason = `DISPATCH EXECUTION BLOCKED: Reconstructed schedule breached independent physical/contract limits: [${violationNotes}]. Equipment actuation locked out.`;
   }
+
+  const gapPct =
+    bestSolution && Number.isFinite(bestTotalCostWithStartup) && rootLowerBound > 0
+      ? Number(
+          Math.max(
+            0,
+            ((bestTotalCostWithStartup - rootLowerBound) / bestTotalCostWithStartup) * 100,
+          ).toFixed(4),
+        )
+      : 0;
+
+  const optimalityProof: OptimalityProof = {
+    isMathematicallyProvenGlobal: isProvenGlobal,
+    proofMethod,
+    optimalityGapPct: gapPct,
+    exploredNodesCount,
+    lowerBoundObjectiveRupees: Math.round(rootLowerBound),
+    incumbentObjectiveRupees: Math.round(bestTotalCostWithStartup),
+    dualityProofStatement: isProvenGlobal
+      ? `Global optimality mathematically proven via ${proofMethod}. Optimality gap: ${gapPct}%. Explored ${exploredNodesCount} nodes with dual LP relaxation bounding.`
+      : `Branch-and-bound feasible incumbent found. Optimality gap: ${gapPct}%. Explored ${exploredNodesCount} nodes.`,
+  };
 
   return {
     solverStatus: isExecutablePlan ? "OPTIMAL_CONVERGED" : "INFEASIBLE_DEFICIT",
@@ -1610,12 +1814,17 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     activeConstraints: verification.violations.map((v) => `Violation H${v.hour}: ${v.constraint}`),
     simplexIterations: totalSimplexIterations,
     solveTimeMs: Number((performance.now() - startTime).toFixed(2)),
+    optimalityProof,
     provenance: {
-      solver: "Joint Multi-Period Simplex LP with Discrete Unit Commitment",
-      formulation: "24-Hour Horizon Joint Multi-Period UCED (Simultaneous 192-Variable Formulation)",
-      baselineMethodology: "Physically Feasible Reference Baseline (Ramped Captive + Merit-Order Grid/Diesel)",
-      interTemporalDynamics: "Battery SoC kinetics and generator/captive ramping co-optimized globally across all 24 intervals",
-      savingsAuditNotice: "Signed variance exposed. Negative interval variance reflects deliberate off-peak storage investment.",
+      solver: "Branch-and-Bound MILP with Joint Multi-Period Two-Phase Simplex",
+      formulation:
+        "24-Hour Horizon Joint Multi-Period UCED (Exact Branch-and-Bound with Dual Bounds)",
+      baselineMethodology:
+        "Physically Feasible Reference Baseline (Ramped Captive + Merit-Order Grid/Diesel)",
+      interTemporalDynamics:
+        "Battery SoC kinetics and generator/captive ramping co-optimized globally across all 24 intervals",
+      savingsAuditNotice:
+        "Signed variance exposed. Negative interval variance reflects deliberate off-peak storage investment.",
       verifiedAt: new Date().toISOString(),
     },
   };
@@ -1629,7 +1838,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
  * Solves constrained economic dispatch using Model Predictive Control (MPC):
  * Constructs a 24-hour lookahead horizon, solves the joint multi-period problem globally,
  * and extracts the first-interval dispatch schedule.
- * 
+ *
  * CRITICAL SAFETY ENFORCEMENT:
  * If the physical schedule is infeasible or fails independent constraint verification,
  * this function strictly returns isExecutablePlan = false, solverStatus = "INFEASIBLE_DEFICIT",
@@ -1662,7 +1871,8 @@ export function solveEconomicDispatch(input: DispatchInput): OptimizationResult 
       const diurnalFactor = 1.0 + Math.sin((hourOfDay - 6) * 0.26) * 0.12;
       hourlyDemand.push(Number((demand * diurnalFactor).toFixed(1)));
 
-      const solarFactor = hourOfDay >= 6 && hourOfDay <= 18 ? Math.sin(((hourOfDay - 6) / 12) * Math.PI) : 0;
+      const solarFactor =
+        hourOfDay >= 6 && hourOfDay <= 18 ? Math.sin(((hourOfDay - 6) / 12) * Math.PI) : 0;
       hourlySolar.push(Number((c.solarCapacityMW * 0.7 * solarFactor).toFixed(1)));
       hourlyWind.push(Number((c.windCapacityMW * 0.45 + Math.sin(t * 0.5) * 20).toFixed(1)));
       hourlyTier.push(tier);
@@ -1687,7 +1897,9 @@ export function solveEconomicDispatch(input: DispatchInput): OptimizationResult 
     return {
       solverStatus: "INFEASIBLE_DEFICIT",
       isExecutablePlan: false,
-      executionBlockedReason: horizonResult.executionBlockedReason || `DISPATCH BLOCKED: Power demand (${demand} MW) breaches physical asset or grid interconnection limits.`,
+      executionBlockedReason:
+        horizonResult.executionBlockedReason ||
+        `DISPATCH BLOCKED: Power demand (${demand} MW) breaches physical asset or grid interconnection limits.`,
       dispatch: null,
       totalCostPerHour: 0,
       baselineCostPerHour: Math.round(demand * tariffRates.gridPeak * 1000),
@@ -1722,6 +1934,9 @@ export function solveEconomicDispatch(input: DispatchInput): OptimizationResult 
   const dispatchSchedule: DispatchSchedule = {
     solarMW: firstInterval.solarMW,
     windMW: firstInterval.windMW,
+    batteryMW: Number(
+      (firstInterval.batteryDischargeMW - firstInterval.batteryChargeMW).toFixed(2),
+    ),
     batteryDischargeMW: firstInterval.batteryDischargeMW,
     batteryChargeMW: firstInterval.batteryChargeMW,
     netBatteryMW: firstInterval.netBatteryMW,

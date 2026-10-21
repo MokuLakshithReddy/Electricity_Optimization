@@ -1,10 +1,10 @@
 /**
  * IntelliGrid AI - Immutable Historical Energy Ledger & Reporting Service
- * 
+ *
  * Generates and verifies interval-level historical energy accounting records
  * with cryptographic block chaining (SHA-256), dynamic shift/day/week/month aggregation,
  * and ISO 50001 audit export capabilities.
- * 
+ *
  * OPERATIONAL & PROVENANCE NOTICE:
  * 1. IN-MEMORY AUDIT DEMONSTRATION: The SHA-256 blockchain implementation provides mathematical
  *    tamper-evidence for historical interval records held in memory. However, in this web application
@@ -75,7 +75,14 @@ export interface AggregatedReport {
   avgReliability: string;
   gridSharePct: string;
   bessSharePct: string;
-  usageChartData: { t: string; solar: number; wind: number; captive: number; grid: number; bess: number }[];
+  usageChartData: {
+    t: string;
+    solar: number;
+    wind: number;
+    captive: number;
+    grid: number;
+    bess: number;
+  }[];
   costTrendData: { t: string; cost: number; savings: number }[];
   ledgerRows: {
     period: string;
@@ -98,7 +105,7 @@ export function computeCanonicalBlockHash(
   previousBlockHash: string,
   timestamp: string,
   solverInputHash: string,
-  dispatchVector: string
+  dispatchVector: string,
 ): string {
   const canonicalPayload = `${previousBlockHash}||${timestamp}||${solverInputHash}||${dispatchVector}`;
   return sha256(canonicalPayload);
@@ -137,7 +144,7 @@ export function verifyLedgerCryptographicIntegrity(records: EnergyLedgerRecord[]
       rec.previousBlockHash,
       rec.timestamp,
       rec.solverInputHash,
-      rec.dispatchVector
+      rec.dispatchVector,
     );
 
     if (computedHash !== rec.blockHashSha256) {
@@ -184,7 +191,9 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
 
     // Generation breakdown
     const isDaylight = hour >= 6 && hour <= 18;
-    const solarMWh = isDaylight ? Number((Math.sin(((hour - 6) / 12) * Math.PI) * 165).toFixed(1)) : 0;
+    const solarMWh = isDaylight
+      ? Number((Math.sin(((hour - 6) / 12) * Math.PI) * 165).toFixed(1))
+      : 0;
     const windMWh = Number((65 + Math.sin(hour * 0.4) * 35).toFixed(1));
     const captiveMWh = Number((isShiftB ? 75 : 55).toFixed(1));
 
@@ -193,7 +202,10 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
     const bessDischargeMWh = isPeakHour ? 65 : 0;
     const bessChargeMWh = !isDaylight && hour < 6 ? 40 : 0;
 
-    const remainingDemand = Math.max(0, demandMWh - solarMWh - windMWh - captiveMWh - bessDischargeMWh);
+    const remainingDemand = Math.max(
+      0,
+      demandMWh - solarMWh - windMWh - captiveMWh - bessDischargeMWh,
+    );
     const gridImportMWh = Number(Math.min(220, remainingDemand).toFixed(1));
     const dieselMWh = Number(Math.max(0, remainingDemand - gridImportMWh).toFixed(1));
 
@@ -208,7 +220,7 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       dieselMWh * 22.56 * 1000;
 
     const baseCost =
-      (solarMWh * 0.75) * 2.1 * 1000 +
+      solarMWh * 0.75 * 2.1 * 1000 +
       captiveMWh * 4.8 * 1000 +
       Math.min(250, demandMWh - solarMWh * 0.75 - captiveMWh) * 11.8 * 1000 +
       Math.max(0, demandMWh - solarMWh * 0.75 - captiveMWh - 250) * 22.56 * 1000;
@@ -226,7 +238,7 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       dieselMWh * 0.26;
 
     const baseCO2 =
-      (solarMWh * 0.75) * 0.048 +
+      solarMWh * 0.75 * 0.048 +
       captiveMWh * 0.88 +
       Math.min(250, demandMWh) * 0.71 +
       dieselMWh * 0.26;
@@ -238,13 +250,21 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
 
     const solverInputData = `${demandMWh}|${solarMWh}|${windMWh}|${Math.round(baseCost)}`;
     const solverInputHash = sha256(solverInputData);
-    const dispatchVector = JSON.stringify([solarMWh, windMWh, bessDischargeMWh, bessChargeMWh, gridImportMWh, captiveMWh, dieselMWh]);
+    const dispatchVector = JSON.stringify([
+      solarMWh,
+      windMWh,
+      bessDischargeMWh,
+      bessChargeMWh,
+      gridImportMWh,
+      captiveMWh,
+      dieselMWh,
+    ]);
 
     const blockHashSha256 = computeCanonicalBlockHash(
       prevHash,
       time.toISOString(),
       solverInputHash,
-      dispatchVector
+      dispatchVector,
     );
     const thisBlockPrevHash = prevHash;
     prevHash = blockHashSha256;
@@ -328,13 +348,17 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
     const ledgerRows = shifts.map((sh) => {
       const shiftSlice = slice.filter((s) => s.shift === sh);
       const shiftEnergy = Math.round(shiftSlice.reduce((a, b) => a + b.demandMWh, 0));
-      const shiftCostLakhs = (shiftSlice.reduce((a, b) => a + b.optimizedCostRupees, 0) / 100000).toFixed(1);
+      const shiftCostLakhs = (
+        shiftSlice.reduce((a, b) => a + b.optimizedCostRupees, 0) / 100000
+      ).toFixed(1);
       const shiftCO2 = Math.round(shiftSlice.reduce((a, b) => a + b.co2EmissionsTonnes, 0));
       const shiftRen = (
         (shiftSlice.reduce((a, b) => a + b.solarMWh + b.windMWh, 0) / Math.max(1, shiftEnergy)) *
         100
       ).toFixed(1);
-      const shiftSavLakhs = (shiftSlice.reduce((a, b) => a + b.modeledSavingsRupees, 0) / 100000).toFixed(1);
+      const shiftSavLakhs = (
+        shiftSlice.reduce((a, b) => a + b.modeledSavingsRupees, 0) / 100000
+      ).toFixed(1);
 
       return {
         period: sh,
@@ -348,12 +372,54 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
     });
 
     const usageChartData = [
-      { t: "00:00", solar: 0, wind: Math.round(slice[0].windMWh), captive: Math.round(slice[0].captiveMWh), grid: Math.round(slice[0].gridImportMWh), bess: 0 },
-      { t: "04:00", solar: 0, wind: Math.round(slice[4].windMWh), captive: Math.round(slice[4].captiveMWh), grid: Math.round(slice[4].gridImportMWh), bess: 0 },
-      { t: "08:00", solar: Math.round(slice[8].solarMWh), wind: Math.round(slice[8].windMWh), captive: Math.round(slice[8].captiveMWh), grid: Math.round(slice[8].gridImportMWh), bess: 0 },
-      { t: "12:00", solar: Math.round(slice[12].solarMWh), wind: Math.round(slice[12].windMWh), captive: Math.round(slice[12].captiveMWh), grid: Math.round(slice[12].gridImportMWh), bess: 0 },
-      { t: "16:00", solar: Math.round(slice[16].solarMWh), wind: Math.round(slice[16].windMWh), captive: Math.round(slice[16].captiveMWh), grid: Math.round(slice[16].gridImportMWh), bess: 0 },
-      { t: "20:00", solar: 0, wind: Math.round(slice[20].windMWh), captive: Math.round(slice[20].captiveMWh), grid: Math.round(slice[20].gridImportMWh), bess: Math.round(slice[20].bessDischargeMWh) },
+      {
+        t: "00:00",
+        solar: 0,
+        wind: Math.round(slice[0].windMWh),
+        captive: Math.round(slice[0].captiveMWh),
+        grid: Math.round(slice[0].gridImportMWh),
+        bess: 0,
+      },
+      {
+        t: "04:00",
+        solar: 0,
+        wind: Math.round(slice[4].windMWh),
+        captive: Math.round(slice[4].captiveMWh),
+        grid: Math.round(slice[4].gridImportMWh),
+        bess: 0,
+      },
+      {
+        t: "08:00",
+        solar: Math.round(slice[8].solarMWh),
+        wind: Math.round(slice[8].windMWh),
+        captive: Math.round(slice[8].captiveMWh),
+        grid: Math.round(slice[8].gridImportMWh),
+        bess: 0,
+      },
+      {
+        t: "12:00",
+        solar: Math.round(slice[12].solarMWh),
+        wind: Math.round(slice[12].windMWh),
+        captive: Math.round(slice[12].captiveMWh),
+        grid: Math.round(slice[12].gridImportMWh),
+        bess: 0,
+      },
+      {
+        t: "16:00",
+        solar: Math.round(slice[16].solarMWh),
+        wind: Math.round(slice[16].windMWh),
+        captive: Math.round(slice[16].captiveMWh),
+        grid: Math.round(slice[16].gridImportMWh),
+        bess: 0,
+      },
+      {
+        t: "20:00",
+        solar: 0,
+        wind: Math.round(slice[20].windMWh),
+        captive: Math.round(slice[20].captiveMWh),
+        grid: Math.round(slice[20].gridImportMWh),
+        bess: Math.round(slice[20].bessDischargeMWh),
+      },
     ];
 
     const costTrendData = [
@@ -423,18 +489,62 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
 
     const costTrendData = days.map((d, idx) => {
       const daySlice = slice.slice(idx * 24, (idx + 1) * 24);
-      const costCr = Number(((daySlice.reduce((a, b) => a + b.optimizedCostRupees, 0)) / 1e7).toFixed(2));
-      const savCr = Number(((daySlice.reduce((a, b) => a + b.modeledSavingsRupees, 0)) / 1e7).toFixed(2));
+      const costCr = Number(
+        (daySlice.reduce((a, b) => a + b.optimizedCostRupees, 0) / 1e7).toFixed(2),
+      );
+      const savCr = Number(
+        (daySlice.reduce((a, b) => a + b.modeledSavingsRupees, 0) / 1e7).toFixed(2),
+      );
       return { t: d, cost: costCr, savings: savCr };
     });
 
     // Trailing 5 calendar weeks
     const ledgerRows = [
-      { period: "Week 31 (28 Jul - 03 Aug)", energy: "11,200", cost: "₹7.60 Cr", co2: "4,280", renewable: "31.2%", savings: "₹1.12 Cr (Modeled)", hashShort: "9f82b71a04" },
-      { period: "Week 32 (04 Aug - 10 Aug)", energy: "11,380", cost: "₹7.69 Cr", co2: "4,322", renewable: "32.1%", savings: "₹1.16 Cr (Modeled)", hashShort: "8b17c93e11" },
-      { period: "Week 33 (11 Aug - 17 Aug)", energy: "11,560", cost: "₹7.78 Cr", co2: "4,364", renewable: "33.0%", savings: "₹1.20 Cr (Modeled)", hashShort: "6c29d01f92" },
-      { period: "Week 34 (18 Aug - 24 Aug)", energy: "11,740", cost: "₹7.87 Cr", co2: "4,406", renewable: "33.9%", savings: "₹1.24 Cr (Modeled)", hashShort: "3e55a821bc" },
-      { period: "Week 35 (25 Aug - 31 Aug)", energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`, cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`, co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`, renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`, savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`, hashShort: slice[slice.length - 1]?.blockHashSha256.slice(0, 10) || "—" },
+      {
+        period: "Week 31 (28 Jul - 03 Aug)",
+        energy: "11,200",
+        cost: "₹7.60 Cr",
+        co2: "4,280",
+        renewable: "31.2%",
+        savings: "₹1.12 Cr (Modeled)",
+        hashShort: "9f82b71a04",
+      },
+      {
+        period: "Week 32 (04 Aug - 10 Aug)",
+        energy: "11,380",
+        cost: "₹7.69 Cr",
+        co2: "4,322",
+        renewable: "32.1%",
+        savings: "₹1.16 Cr (Modeled)",
+        hashShort: "8b17c93e11",
+      },
+      {
+        period: "Week 33 (11 Aug - 17 Aug)",
+        energy: "11,560",
+        cost: "₹7.78 Cr",
+        co2: "4,364",
+        renewable: "33.0%",
+        savings: "₹1.20 Cr (Modeled)",
+        hashShort: "6c29d01f92",
+      },
+      {
+        period: "Week 34 (18 Aug - 24 Aug)",
+        energy: "11,740",
+        cost: "₹7.87 Cr",
+        co2: "4,406",
+        renewable: "33.9%",
+        savings: "₹1.24 Cr (Modeled)",
+        hashShort: "3e55a821bc",
+      },
+      {
+        period: "Week 35 (25 Aug - 31 Aug)",
+        energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`,
+        cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`,
+        co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`,
+        renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`,
+        savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`,
+        hashShort: slice[slice.length - 1]?.blockHashSha256.slice(0, 10) || "—",
+      },
     ];
 
     return {
@@ -493,16 +603,52 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
 
   const costTrendData = weeks.map((w, idx) => {
     const weekSlice = ledger.slice(idx * 168, (idx + 1) * 168);
-    const costCr = Number(((weekSlice.reduce((a, b) => a + b.optimizedCostRupees, 0)) / 1e7).toFixed(2));
-    const savCr = Number(((weekSlice.reduce((a, b) => a + b.modeledSavingsRupees, 0)) / 1e7).toFixed(2));
+    const costCr = Number(
+      (weekSlice.reduce((a, b) => a + b.optimizedCostRupees, 0) / 1e7).toFixed(2),
+    );
+    const savCr = Number(
+      (weekSlice.reduce((a, b) => a + b.modeledSavingsRupees, 0) / 1e7).toFixed(2),
+    );
     return { t: w, cost: costCr, savings: savCr };
   });
 
   const ledgerRows = [
-    { period: "May 2026", energy: "48,200", cost: "₹31.4 Cr", co2: "18,200", renewable: "34.1%", savings: "₹4.8 Cr (Modeled)", hashShort: "5a19c72e01" },
-    { period: "Jun 2026", energy: "49,100", cost: "₹32.1 Cr", co2: "18,650", renewable: "35.2%", savings: "₹5.1 Cr (Modeled)", hashShort: "7f28d91b44" },
-    { period: "Jul 2026", energy: "49,800", cost: "₹32.8 Cr", co2: "18,900", renewable: "36.0%", savings: "₹5.3 Cr (Modeled)", hashShort: "1b93f88c32" },
-    { period: "Aug 2026", energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`, cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`, co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`, renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`, savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`, hashShort: ledger[ledger.length - 1]?.blockHashSha256.slice(0, 10) || "—" },
+    {
+      period: "May 2026",
+      energy: "48,200",
+      cost: "₹31.4 Cr",
+      co2: "18,200",
+      renewable: "34.1%",
+      savings: "₹4.8 Cr (Modeled)",
+      hashShort: "5a19c72e01",
+    },
+    {
+      period: "Jun 2026",
+      energy: "49,100",
+      cost: "₹32.1 Cr",
+      co2: "18,650",
+      renewable: "35.2%",
+      savings: "₹5.1 Cr (Modeled)",
+      hashShort: "7f28d91b44",
+    },
+    {
+      period: "Jul 2026",
+      energy: "49,800",
+      cost: "₹32.8 Cr",
+      co2: "18,900",
+      renewable: "36.0%",
+      savings: "₹5.3 Cr (Modeled)",
+      hashShort: "1b93f88c32",
+    },
+    {
+      period: "Aug 2026",
+      energy: `${Math.round(totalDemand).toLocaleString("en-IN")}`,
+      cost: `₹${(totalOptCost / 1e7).toFixed(2)} Cr`,
+      co2: `${Math.round(totalCO2).toLocaleString("en-IN")}`,
+      renewable: `${(((totalSolar + totalWind) / totalDemand) * 100).toFixed(1)}%`,
+      savings: `₹${(totalSavings / 1e7).toFixed(2)} Cr (Modeled)`,
+      hashShort: ledger[ledger.length - 1]?.blockHashSha256.slice(0, 10) || "—",
+    },
   ];
 
   return {

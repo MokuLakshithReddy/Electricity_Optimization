@@ -1,8 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { Download, FileText, Leaf, IndianRupee, Zap, CheckCircle, ShieldCheck, FileSpreadsheet, AlertTriangle, Info } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Leaf,
+  IndianRupee,
+  Zap,
+  CheckCircle,
+  ShieldCheck,
+  FileSpreadsheet,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 import { toast } from "sonner";
-import { queryLedgerReport, exportLedgerToCsv, buildHistoricalLedger, verifyLedgerCryptographicIntegrity } from "@/lib/energyLedger";
+import {
+  queryLedgerReport,
+  exportLedgerToCsv,
+  buildHistoricalLedger,
+  verifyLedgerCryptographicIntegrity,
+} from "@/lib/energyLedger";
 import {
   Bar,
   BarChart,
@@ -50,22 +66,25 @@ export function ReportsPage() {
   // Query historical energy ledger dynamically based on selected period
   const ledgerData = useMemo(() => queryLedgerReport(period), [period]);
 
-  const reportMetrics = useMemo(() => ({
-    title: ledgerData.title,
-    consumed: ledgerData.totalConsumedMWh,
-    consumedUnit: "MWh",
-    cost: ledgerData.totalCostFormatted,
-    emissions: ledgerData.totalEmissionsFormatted,
-    emissionsUnit: "tCO₂",
-    savings: ledgerData.totalSavingsFormatted,
-    renewablePct: ledgerData.avgRenewablePct,
-    reliability: ledgerData.avgReliability,
-    gridPct: ledgerData.gridSharePct,
-    bessPct: ledgerData.bessSharePct,
-    usageData: ledgerData.usageChartData,
-    costTrendData: ledgerData.costTrendData,
-    ledger: ledgerData.ledgerRows,
-  }), [ledgerData]);
+  const reportMetrics = useMemo(
+    () => ({
+      title: ledgerData.title,
+      consumed: ledgerData.totalConsumedMWh,
+      consumedUnit: "MWh",
+      cost: ledgerData.totalCostFormatted,
+      emissions: ledgerData.totalEmissionsFormatted,
+      emissionsUnit: "tCO₂",
+      savings: ledgerData.totalSavingsFormatted,
+      renewablePct: ledgerData.avgRenewablePct,
+      reliability: ledgerData.avgReliability,
+      gridPct: ledgerData.gridSharePct,
+      bessPct: ledgerData.bessSharePct,
+      usageData: ledgerData.usageChartData,
+      costTrendData: ledgerData.costTrendData,
+      ledger: ledgerData.ledgerRows,
+    }),
+    [ledgerData],
+  );
 
   // Cryptographic Ledger Verification Action
   const handleVerifyLedger = () => {
@@ -73,7 +92,9 @@ export function ReportsPage() {
     const res = verifyLedgerCryptographicIntegrity(fullLedger);
     if (res.isValid) {
       setIntegrityStatus({ verified: true, blocks: res.verifiedBlocks, isValid: true });
-      toast.success(`Ledger verified: All ${res.verifiedBlocks} interval blocks validated with SHA-256 chain integrity.`);
+      toast.success(
+        `Ledger verified: All ${res.verifiedBlocks} interval blocks validated with SHA-256 chain integrity.`,
+      );
     } else {
       setIntegrityStatus({ verified: true, blocks: res.verifiedBlocks, isValid: false });
       toast.error(`Verification failed at block #${res.brokenBlockIndex}: hash mismatch!`);
@@ -93,8 +114,6 @@ export function ReportsPage() {
     document.body.removeChild(link);
     toast.success("Cryptographically signed interval energy ledger exported to CSV.");
   };
-
-
 
   // PDF Export Action
   const handleExportPDF = () => {
@@ -167,7 +186,7 @@ export function ReportsPage() {
                   <td>${row.renewable}</td>
                   <td>${row.savings}</td>
                 </tr>
-              `
+              `,
                 )
                 .join("")}
             </tbody>
@@ -204,7 +223,6 @@ export function ReportsPage() {
 
         {/* Right Top Controls: Segmented Period Selector & PDF Export Button */}
         <div className="flex flex-wrap items-center gap-3">
-          
           {/* HIGH CONTRAST SEGMENTED PERIOD SELECTOR */}
           <div className="flex items-center gap-1 rounded-full bg-[#FAF8F5] border border-[#E6E1D7] p-1 shadow-2xs">
             {(["Daily", "Weekly", "Monthly"] as ReportPeriod[]).map((p) => {
@@ -254,14 +272,16 @@ export function ReportsPage() {
             Measurement & Verification (M&V) Protocol Notice (IPMVP Option C Demarcation)
           </p>
           <p className="text-amber-900 leading-relaxed">
-            All cost variances and savings reported below are modeled optimization figures calculated against the facility operating reference baseline. Simulated savings must not be presented as revenue-grade verified results until post-commissioning submeter calibration and utility tariff settlement are formally validated.
+            All cost variances and savings reported below are modeled optimization figures
+            calculated against the facility operating reference baseline. Simulated savings must not
+            be presented as revenue-grade verified results until post-commissioning submeter
+            calibration and utility tariff settlement are formally validated.
           </p>
         </div>
       </div>
 
       {/* 4 Key Metrics Cards (Updated dynamically by period selection) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
         {/* Card 1: Energy Consumed */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
@@ -277,13 +297,9 @@ export function ReportsPage() {
               <span className="font-display text-3xl font-extrabold text-[#1F2937]">
                 {reportMetrics.consumed}
               </span>
-              <span className="text-sm font-bold text-[#6B7280]">
-                {reportMetrics.consumedUnit}
-              </span>
+              <span className="text-sm font-bold text-[#6B7280]">{reportMetrics.consumedUnit}</span>
             </div>
-            <p className="text-xs text-[#6B7280] font-medium mt-1">
-              Period total load
-            </p>
+            <p className="text-xs text-[#6B7280] font-medium mt-1">Period total load</p>
           </div>
         </div>
 
@@ -301,9 +317,7 @@ export function ReportsPage() {
             <span className="font-display text-3xl font-extrabold text-[#1F2937]">
               {reportMetrics.cost}
             </span>
-            <p className="text-xs text-[#6B7280] font-medium mt-1">
-              Landed tariff exposure
-            </p>
+            <p className="text-xs text-[#6B7280] font-medium mt-1">Landed tariff exposure</p>
           </div>
         </div>
 
@@ -326,9 +340,7 @@ export function ReportsPage() {
                 {reportMetrics.emissionsUnit}
               </span>
             </div>
-            <p className="text-xs text-emerald-700 font-medium mt-1">
-              Scope 1 + Scope 2 emissions
-            </p>
+            <p className="text-xs text-emerald-700 font-medium mt-1">Scope 1 + Scope 2 emissions</p>
           </div>
         </div>
 
@@ -352,12 +364,10 @@ export function ReportsPage() {
             </p>
           </div>
         </div>
-
       </div>
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
         {/* Source-wise Consumption Stacked Bar Chart */}
         <div className="xl:col-span-2 rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
@@ -365,9 +375,7 @@ export function ReportsPage() {
               <h3 className="font-display text-lg font-bold text-[#1F2937]">
                 Source-wise consumption
               </h3>
-              <p className="text-xs text-[#6B7280]">
-                {period} energy mix breakdown (MWh)
-              </p>
+              <p className="text-xs text-[#6B7280]">{period} energy mix breakdown (MWh)</p>
             </div>
             <span className="text-xs font-bold text-[#1B4D3E] bg-[#E8F5E9] px-3 py-1 rounded-full border border-emerald-200">
               Renewable share {reportMetrics.renewablePct}
@@ -401,9 +409,7 @@ export function ReportsPage() {
         {/* Cost & Savings Trend Chart */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs space-y-4">
           <div>
-            <h3 className="font-display text-lg font-bold text-[#1F2937]">
-              Cost & savings trend
-            </h3>
+            <h3 className="font-display text-lg font-bold text-[#1F2937]">Cost & savings trend</h3>
             <p className="text-xs text-[#6B7280]">{period} trend progression</p>
           </div>
 
@@ -421,13 +427,26 @@ export function ReportsPage() {
                     fontSize: 12,
                   }}
                 />
-                <Line type="monotone" dataKey="cost" stroke="#2563EB" strokeWidth={2.5} dot={false} name="Cost" />
-                <Line type="monotone" dataKey="savings" stroke="#10B981" strokeWidth={2.5} dot={false} name="Savings" />
+                <Line
+                  type="monotone"
+                  dataKey="cost"
+                  stroke="#2563EB"
+                  strokeWidth={2.5}
+                  dot={false}
+                  name="Cost"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="savings"
+                  stroke="#10B981"
+                  strokeWidth={2.5}
+                  dot={false}
+                  name="Savings"
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
-
       </div>
 
       {/* Dynamic Report Ledger Table */}
@@ -457,9 +476,13 @@ export function ReportsPage() {
         </div>
 
         {integrityStatus && (
-          <div className={`p-3 rounded-2xl text-xs flex items-center justify-between border ${
-            integrityStatus.isValid ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-red-50 border-red-200 text-red-900"
-          }`}>
+          <div
+            className={`p-3 rounded-2xl text-xs flex items-center justify-between border ${
+              integrityStatus.isValid
+                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                : "bg-red-50 border-red-200 text-red-900"
+            }`}
+          >
             <span className="font-medium">
               {integrityStatus.isValid
                 ? `Cryptographic Audit Passed: All ${integrityStatus.blocks} interval blocks verified with authentic SHA-256 signatures and zero chain breaks.`

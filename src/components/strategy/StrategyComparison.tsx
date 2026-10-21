@@ -53,7 +53,8 @@ export function StrategyComparison({
             </span>
           </div>
           <p className="text-xs text-slate-500 font-normal mt-0.5">
-            Compare rule-based baseline vs AI Pareto-optimized multi-objective energy dispatch strategies
+            Compare rule-based baseline vs AI Pareto-optimized multi-objective energy dispatch
+            strategies
           </p>
         </div>
 

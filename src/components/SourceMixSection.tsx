@@ -67,7 +67,9 @@ export function SourceMixSection({ onSelectSource }: SourceMixSectionProps) {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-display text-xl font-bold text-[#1F2937]">Current Energy Mix</h3>
-          <p className="text-xs text-[#6B7280]">Live generation breakdown across Tata Steel assets</p>
+          <p className="text-xs text-[#6B7280]">
+            Live generation breakdown across Tata Steel assets
+          </p>
         </div>
       </div>
 
@@ -88,7 +90,9 @@ export function SourceMixSection({ onSelectSource }: SourceMixSectionProps) {
             </div>
 
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">{item.name}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
+                {item.name}
+              </p>
               <h4 className="font-display text-2xl font-bold text-[#1F2937] mt-0.5">
                 {item.mw} <span className="text-xs font-normal text-[#6B7280]">MW</span>
               </h4>
@@ -96,7 +100,9 @@ export function SourceMixSection({ onSelectSource }: SourceMixSectionProps) {
 
             <div className="mt-3 pt-2 border-t border-[#F3F0EA] flex items-center justify-between text-[10px]">
               <span className="font-semibold text-[#6B7280]">Status</span>
-              <span className={`font-bold px-2 py-0.5 rounded-full ${item.mw > 0 ? "text-emerald-800 bg-[#E8F5E9]" : "text-amber-800 bg-amber-50"}`}>
+              <span
+                className={`font-bold px-2 py-0.5 rounded-full ${item.mw > 0 ? "text-emerald-800 bg-[#E8F5E9]" : "text-amber-800 bg-amber-50"}`}
+              >
                 {item.status}
               </span>
             </div>

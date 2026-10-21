@@ -24,12 +24,32 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
   if (!isOpen) return null;
 
   const scenarios: { id: ScenarioPreset; name: string; desc: string }[] = [
-    { id: "battery_failure", name: "Battery Failure (0 MWh)", desc: "Simulate loss of 118 MWh BESS storage" },
-    { id: "grid_failure", name: "132 kV Grid Outage (N-1)", desc: "Simulate loss of primary grid import feeder" },
-    { id: "solar_drop", name: "Solar Generation -50%", desc: "Simulate sudden convective cloud cover" },
+    {
+      id: "battery_failure",
+      name: "Battery Failure (0 MWh)",
+      desc: "Simulate loss of 118 MWh BESS storage",
+    },
+    {
+      id: "grid_failure",
+      name: "132 kV Grid Outage (N-1)",
+      desc: "Simulate loss of primary grid import feeder",
+    },
+    {
+      id: "solar_drop",
+      name: "Solar Generation -50%",
+      desc: "Simulate sudden convective cloud cover",
+    },
     { id: "wind_drop", name: "Wind Generation -50%", desc: "Simulate low coastal wind conditions" },
-    { id: "demand_spike", name: "Plant Demand +20%", desc: "Simulate simultaneous rolling mill start" },
-    { id: "battery_expansion", name: "BESS Capacity +100 MWh", desc: "Evaluate ROI of battery expansion" },
+    {
+      id: "demand_spike",
+      name: "Plant Demand +20%",
+      desc: "Simulate simultaneous rolling mill start",
+    },
+    {
+      id: "battery_expansion",
+      name: "BESS Capacity +100 MWh",
+      desc: "Evaluate ROI of battery expansion",
+    },
   ];
 
   const handleSelectScenario = (id: ScenarioPreset) => {
@@ -222,9 +242,7 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
           {/* Simulation Output Card */}
           <div className="rounded-3xl bg-[#FAF8F5] border border-[#E6E1D7] p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[#E6E1D7] pb-3">
-              <h4 className="font-display text-sm font-bold text-[#1F2937]">
-                {results.title}
-              </h4>
+              <h4 className="font-display text-sm font-bold text-[#1F2937]">{results.title}</h4>
               <span className="text-xs font-bold px-3 py-1 rounded-full bg-white border border-[#E6E1D7] text-[#1B4D3E]">
                 {results.status}
               </span>
@@ -234,22 +252,30 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="rounded-2xl bg-white p-3 border border-[#E6E1D7]">
                 <span className="text-[10px] font-bold text-[#6B7280] uppercase">Grid Impact</span>
-                <p className="font-display text-lg font-bold text-[#1F2937] mt-0.5">{results.gridChange}</p>
+                <p className="font-display text-lg font-bold text-[#1F2937] mt-0.5">
+                  {results.gridChange}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-white p-3 border border-[#E6E1D7]">
                 <span className="text-[10px] font-bold text-[#6B7280] uppercase">Genset Usage</span>
-                <p className="font-display text-lg font-bold text-[#1F2937] mt-0.5">{results.genChange}</p>
+                <p className="font-display text-lg font-bold text-[#1F2937] mt-0.5">
+                  {results.genChange}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-white p-3 border border-[#E6E1D7]">
                 <span className="text-[10px] font-bold text-[#6B7280] uppercase">Cost Impact</span>
-                <p className={`font-display text-lg font-bold mt-0.5 ${results.impactColor}`}>{results.costDelta}</p>
+                <p className={`font-display text-lg font-bold mt-0.5 ${results.impactColor}`}>
+                  {results.costDelta}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-white p-3 border border-[#E6E1D7]">
                 <span className="text-[10px] font-bold text-[#6B7280] uppercase">Reliability</span>
-                <p className="font-display text-lg font-bold text-emerald-700 mt-0.5">{results.reliability}</p>
+                <p className="font-display text-lg font-bold text-emerald-700 mt-0.5">
+                  {results.reliability}
+                </p>
               </div>
             </div>
 
@@ -271,7 +297,8 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
         {/* Footer Buttons */}
         <div className="pt-4 border-t border-[#F3F0EA] flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
           <span className="text-[11px] text-[#6B7280]">
-            Digital Twin Mode: <strong className="text-amber-800">Physical Actuation Locked</strong> pending site validation.
+            Digital Twin Mode: <strong className="text-amber-800">Physical Actuation Locked</strong>{" "}
+            pending site validation.
           </span>
           <div className="flex items-center gap-3">
             <button

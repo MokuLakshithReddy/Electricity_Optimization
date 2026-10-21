@@ -108,7 +108,7 @@ function CopilotPage() {
     });
 
     if (analysis.executableAction?.actionType === "TRIGGER_SIMULATION") {
-      runSimulationScenario(analysis.executableAction.payload);
+      runSimulationScenario(String(analysis.executableAction.payload));
     }
 
     return {
@@ -128,16 +128,17 @@ function CopilotPage() {
         reliability: analysis.impact.reliabilityFormatted,
         confidence: analysis.calibratedConfidence,
       },
-      actionLink: analysis.executableAction
+      ...(analysis.executableAction
         ? {
-            label: analysis.executableAction.label,
-            scenarioId:
-              analysis.executableAction.actionType === "TRIGGER_SIMULATION"
-                ? analysis.executableAction.payload
-                : undefined,
-            route: "/app/scenarios",
+            actionLink: {
+              label: analysis.executableAction.label,
+              ...(analysis.executableAction.actionType === "TRIGGER_SIMULATION"
+                ? { scenarioId: String(analysis.executableAction.payload) }
+                : {}),
+              route: "/app/scenarios",
+            },
           }
-        : undefined,
+        : {}),
     };
   };
 
@@ -197,10 +198,8 @@ function CopilotPage() {
 
       {/* Main 2-Column Grid: 68% Left Copilot Panel | 32% Right Explainable Recommendations */}
       <div className="grid grid-cols-1 xl:grid-cols-[68%_32%] gap-6 items-start">
-        
         {/* LEFT COLUMN: MAIN COPILOT PANEL */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] shadow-xs flex flex-col h-[740px] overflow-hidden">
-          
           {/* Panel Header & Live Telemetry Context Bar */}
           <div className="border-b border-[#F3F0EA] p-4 bg-[#FAF8F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -211,7 +210,9 @@ function CopilotPage() {
                 <h3 className="font-display text-base font-bold text-[#1F2937]">
                   IntelliGrid Copilot
                 </h3>
-                <p className="text-xs text-[#6B7280]">Online · Industrial Reasoning Engine Active</p>
+                <p className="text-xs text-[#6B7280]">
+                  Online · Industrial Reasoning Engine Active
+                </p>
               </div>
             </div>
 
@@ -238,7 +239,6 @@ function CopilotPage() {
 
           {/* Chat Messages Body */}
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            
             {/* Welcome State when no messages */}
             {messages.length === 0 && (
               <div className="my-6 rounded-3xl bg-[#FAF8F5] border border-[#E6E1D7] p-6 space-y-3">
@@ -246,7 +246,8 @@ function CopilotPage() {
                   Good evening. I'm your IntelliGrid Copilot.
                 </h3>
                 <p className="text-xs sm:text-sm text-[#4B5563]">
-                  I'm monitoring your plant's energy demand, solar, wind, battery, grid and backup generation in real time.
+                  I'm monitoring your plant's energy demand, solar, wind, battery, grid and backup
+                  generation in real time.
                 </p>
                 <p className="text-xs text-[#6B7280] font-medium">
                   Ask me about cost, carbon, reliability, forecasting or energy dispatch.
@@ -285,7 +286,9 @@ function CopilotPage() {
                           </div>
                           <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
                             <span className="text-[10px] text-[#6B7280] block">SOLAR</span>
-                            <span className="font-bold text-amber-600">{msg.decision.solar} MW</span>
+                            <span className="font-bold text-amber-600">
+                              {msg.decision.solar} MW
+                            </span>
                           </div>
                           <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
                             <span className="text-[10px] text-[#6B7280] block">WIND</span>
@@ -293,11 +296,15 @@ function CopilotPage() {
                           </div>
                           <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
                             <span className="text-[10px] text-[#6B7280] block">BATTERY</span>
-                            <span className="font-bold text-emerald-600">{msg.decision.battery} MW</span>
+                            <span className="font-bold text-emerald-600">
+                              {msg.decision.battery} MW
+                            </span>
                           </div>
                           <div className="rounded-xl bg-[#FAF8F5] p-2 border border-[#E6E1D7]">
                             <span className="text-[10px] text-[#6B7280] block">GENSET</span>
-                            <span className="font-bold text-rose-600">{msg.decision.generator} MW</span>
+                            <span className="font-bold text-rose-600">
+                              {msg.decision.generator} MW
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -326,7 +333,7 @@ function CopilotPage() {
                       <button
                         onClick={() => {
                           if (msg.actionLink?.route) {
-                            navigate({ to: msg.actionLink.route as any });
+                            navigate({ to: msg.actionLink.route as never });
                           }
                         }}
                         className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1B4D3E] hover:underline pt-1 cursor-pointer"
@@ -356,7 +363,6 @@ function CopilotPage() {
 
           {/* Sticky Bottom Input Section */}
           <div className="p-4 border-t border-[#F3F0EA] bg-[#FAF8F5] space-y-3">
-            
             {/* Quick Suggestions Chips */}
             <div className="flex flex-wrap gap-2">
               {quickQuestions.map((q) => (
@@ -418,7 +424,6 @@ function CopilotPage() {
               </div>
             </form>
           </div>
-
         </div>
 
         {/* RIGHT COLUMN: EXPLAINABLE RECOMMENDATIONS (32% width) */}
@@ -438,7 +443,6 @@ function CopilotPage() {
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );

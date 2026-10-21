@@ -1,6 +1,22 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Star, CheckCircle2, Cpu, ShieldAlert, Zap, Sun, Wind, BatteryCharging, Factory, Flame } from "lucide-react";
-import { CalculatedStrategy, formatIndianCurrencyCr, formatExactRupees } from "@/lib/strategyEngine";
+import {
+  X,
+  Star,
+  CheckCircle2,
+  Cpu,
+  ShieldAlert,
+  Zap,
+  Sun,
+  Wind,
+  BatteryCharging,
+  Factory,
+  Flame,
+} from "lucide-react";
+import {
+  CalculatedStrategy,
+  formatIndianCurrencyCr,
+  formatExactRupees,
+} from "@/lib/strategyEngine";
 
 interface StrategyDetailsModalProps {
   strategy: CalculatedStrategy | null;
@@ -13,10 +29,25 @@ export function StrategyDetailsModal({ strategy, onClose }: StrategyDetailsModal
   const mixItems = [
     { label: "Solar PV", pct: strategy.energyMix.solarPct, icon: Sun, color: "bg-amber-500" },
     { label: "Wind Turbine", pct: strategy.energyMix.windPct, icon: Wind, color: "bg-cyan-500" },
-    { label: "Battery BESS", pct: strategy.energyMix.batteryPct, icon: BatteryCharging, color: "bg-emerald-500" },
+    {
+      label: "Battery BESS",
+      pct: strategy.energyMix.batteryPct,
+      icon: BatteryCharging,
+      color: "bg-emerald-500",
+    },
     { label: "Utility Grid", pct: strategy.energyMix.gridPct, icon: Zap, color: "bg-blue-500" },
-    { label: "Captive Thermal", pct: strategy.energyMix.captivePct, icon: Factory, color: "bg-orange-500" },
-    { label: "Backup Diesel", pct: strategy.energyMix.backupGeneratorPct, icon: Flame, color: "bg-rose-500" },
+    {
+      label: "Captive Thermal",
+      pct: strategy.energyMix.captivePct,
+      icon: Factory,
+      color: "bg-orange-500",
+    },
+    {
+      label: "Backup Diesel",
+      pct: strategy.energyMix.backupGeneratorPct,
+      icon: Flame,
+      color: "bg-rose-500",
+    },
   ];
 
   return (
@@ -34,9 +65,7 @@ export function StrategyDetailsModal({ strategy, onClose }: StrategyDetailsModal
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-display text-2xl font-bold text-slate-900">
-                  {strategy.title}
-                </h3>
+                <h3 className="font-display text-2xl font-bold text-slate-900">{strategy.title}</h3>
                 {strategy.isRecommended && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
                     <Star className="w-3.5 h-3.5 fill-emerald-600 text-emerald-600" />
@@ -95,7 +124,8 @@ export function StrategyDetailsModal({ strategy, onClose }: StrategyDetailsModal
               </h4>
               <span className="text-xs font-semibold text-emerald-700">
                 Annual Savings: {formatIndianCurrencyCr(strategy.savingsVsCurrentCr)}
-                {strategy.savingsVsCurrentCr > 0 && ` (${formatExactRupees(strategy.savingsVsCurrentCr)})`}
+                {strategy.savingsVsCurrentCr > 0 &&
+                  ` (${formatExactRupees(strategy.savingsVsCurrentCr)})`}
               </span>
             </div>
 

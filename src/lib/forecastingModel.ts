@@ -1,10 +1,10 @@
 /**
  * IntelliGrid AI - Industrial Time-Series Forecasting & Model Evaluation Engine
- * 
+ *
  * Implements an autoregressive multi-feature load forecasting model
  * with chronological train/validation/test holdout splitting, benchmark comparisons
  * against standard persistence/moving average baselines, and conformal uncertainty intervals.
- * 
+ *
  * OPERATIONAL & PROVENANCE NOTICE:
  * 1. SYNTHETIC BENCHMARK GROUNDING: The 720 hours of historical telemetry used in this
  *    module are generated via deterministic synthetic diurnal models calibrated to typical
@@ -77,7 +77,14 @@ export interface ModelGovernanceCard {
   featureImportance: { feature: string; weightPct: number; description: string }[];
   holdoutEvaluation: ModelMetrics;
   baselines: BaselineComparison[];
-  residualQuantiles: { p10: number; p25: number; p50: number; p75: number; p90: number; p95: number };
+  residualQuantiles: {
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    p95: number;
+  };
   lastTrainedAt: string;
   trainingStatus: "VERIFIED_CONVERGED";
   evaluationProtocol: string;
@@ -126,20 +133,26 @@ export function generate30DayHistoricalTelemetry(): HistoricalTelemetryPoint[] {
     // Solar irradiance (0 at night, peak ~920 W/m² at 12:00)
     const solarAngle = Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI));
     const cloudNoise = seededRandom(i * 1.7) > 0.75 ? 0.65 : 1.0;
-    const solarIrradianceWm2 = hour >= 6 && hour <= 18 ? Math.round(920 * solarAngle * cloudNoise) : 0;
-    const actualSolarMW = Number(((solarIrradianceWm2 / 1000) * 175 * (seededRandom(i * 3.1) * 0.1 + 0.95)).toFixed(1));
+    const solarIrradianceWm2 =
+      hour >= 6 && hour <= 18 ? Math.round(920 * solarAngle * cloudNoise) : 0;
+    const actualSolarMW = Number(
+      ((solarIrradianceWm2 / 1000) * 175 * (seededRandom(i * 3.1) * 0.1 + 0.95)).toFixed(1),
+    );
 
     // Wind speed (higher at night / evening in this microclimate)
     const windBase = 6.5 + Math.sin(hour * 0.25) * 2.8 + seededRandom(i * 4.9) * 2.2;
     const windSpeedMs = Number(Math.max(1.5, windBase).toFixed(1));
-    const actualWindMW = Number((Math.min(130, Math.pow(windSpeedMs / 10, 3) * 115)).toFixed(1));
+    const actualWindMW = Number(Math.min(130, Math.pow(windSpeedMs / 10, 3) * 115).toFixed(1));
 
     // Temperature (cooler at 05:00, peak at 14:00)
-    const ambientTempC = Number((26 + Math.sin((hour - 9) * 0.26) * 7.5 + seededRandom(i * 2.2) * 1.2).toFixed(1));
+    const ambientTempC = Number(
+      (26 + Math.sin((hour - 9) * 0.26) * 7.5 + seededRandom(i * 2.2) * 1.2).toFixed(1),
+    );
 
     // Total industrial load with realistic metallurgical process noise
     const noise = (seededRandom(i * 9.3) - 0.5) * 16;
-    const baseDemand = (380 + shiftLoad) * weekendFactor + (ambientTempC > 30 ? (ambientTempC - 30) * 4 : 0);
+    const baseDemand =
+      (380 + shiftLoad) * weekendFactor + (ambientTempC > 30 ? (ambientTempC - 30) * 4 : 0);
     const actualDemandMW = Number((baseDemand + noise).toFixed(1));
 
     data.push({
@@ -185,7 +198,7 @@ export function predictLoadMW(
   recentDemand: number[], // [t-168, ..., t-24, ..., t-2, t-1]
   hour: number,
   dayOfWeek: number,
-  tempC: number
+  tempC: number,
 ): number {
   const t_minus_1 = recentDemand[recentDemand.length - 1] ?? 500;
   const t_minus_2 = recentDemand[recentDemand.length - 2] ?? t_minus_1;
@@ -215,11 +228,23 @@ export function predictLoadMW(
 export function evaluateHoldoutTestSet(): {
   modelMetrics: ModelMetrics;
   baselines: BaselineComparison[];
-  holdoutPoints: { timestamp: string; actual: number; predicted: number; persistence: number; residual: number }[];
+  holdoutPoints: {
+    timestamp: string;
+    actual: number;
+    predicted: number;
+    persistence: number;
+    residual: number;
+  }[];
 } {
   // Holdout test set: Hours 600 to 719 (Last 5 days / 120 hours)
   const testSet = HISTORICAL_TELEMETRY.slice(600, 720);
-  const holdoutPoints: { timestamp: string; actual: number; predicted: number; persistence: number; residual: number }[] = [];
+  const holdoutPoints: {
+    timestamp: string;
+    actual: number;
+    predicted: number;
+    persistence: number;
+    residual: number;
+  }[] = [];
 
   let sumAbsPctErrModel = 0;
   let sumSqErrModel = 0;
@@ -246,7 +271,9 @@ export function evaluateHoldoutTestSet(): {
     const actual = point.actualDemandMW;
 
     // Slices for autoregressive features
-    const historySlice = HISTORICAL_TELEMETRY.slice(Math.max(0, globalIdx - 168), globalIdx).map((h) => h.actualDemandMW);
+    const historySlice = HISTORICAL_TELEMETRY.slice(Math.max(0, globalIdx - 168), globalIdx).map(
+      (h) => h.actualDemandMW,
+    );
 
     // 1. Trained Model Prediction
     const pred = predictLoadMW(historySlice, point.hour, point.dayOfWeek, point.ambientTempC);
@@ -322,7 +349,9 @@ export function evaluateHoldoutTestSet(): {
       rmse: seasonalRmse, // ~34.8 MW
       mae: seasonalMae, // ~28.1 MW
       r2: seasonalR2, // ~0.83
-      relativeImprovementMape: Number((((seasonalMape - modelMape) / seasonalMape) * 100).toFixed(1)),
+      relativeImprovementMape: Number(
+        (((seasonalMape - modelMape) / seasonalMape) * 100).toFixed(1),
+      ),
     },
   ];
 
@@ -348,11 +377,31 @@ export const MODEL_GOVERNANCE_CARD: ModelGovernanceCard = {
   },
   featureImportance: [
     { feature: "Lag 1h Load (t-1)", weightPct: 36.4, description: "Immediate production momentum" },
-    { feature: "Lag 24h Seasonal Load (t-24)", weightPct: 24.8, description: "Diurnal industrial shift pattern" },
-    { feature: "Hour-of-Day Cyclical (sin/cos)", weightPct: 15.2, description: "Scheduled shift transitions" },
-    { feature: "Lag 168h Weekly Load (t-168)", weightPct: 9.6, description: "Weekly batch cycling" },
-    { feature: "Ambient Temperature (°C)", weightPct: 8.2, description: "Chiller and HVAC cooling delta" },
-    { feature: "Weekend Schedule Dampening", weightPct: 5.8, description: "Reduced weekend maintenance shifts" },
+    {
+      feature: "Lag 24h Seasonal Load (t-24)",
+      weightPct: 24.8,
+      description: "Diurnal industrial shift pattern",
+    },
+    {
+      feature: "Hour-of-Day Cyclical (sin/cos)",
+      weightPct: 15.2,
+      description: "Scheduled shift transitions",
+    },
+    {
+      feature: "Lag 168h Weekly Load (t-168)",
+      weightPct: 9.6,
+      description: "Weekly batch cycling",
+    },
+    {
+      feature: "Ambient Temperature (°C)",
+      weightPct: 8.2,
+      description: "Chiller and HVAC cooling delta",
+    },
+    {
+      feature: "Weekend Schedule Dampening",
+      weightPct: 5.8,
+      description: "Reduced weekend maintenance shifts",
+    },
   ],
   holdoutEvaluation: evaluation.modelMetrics,
   baselines: evaluation.baselines,
@@ -366,7 +415,8 @@ export const MODEL_GOVERNANCE_CARD: ModelGovernanceCard = {
   },
   lastTrainedAt: "2026-10-16T04:12:00Z",
   trainingStatus: "VERIFIED_CONVERGED",
-  evaluationProtocol: "Standardized Synthetic Diurnal Industrial Benchmark (720h Chronological Split)",
+  evaluationProtocol:
+    "Standardized Synthetic Diurnal Industrial Benchmark (720h Chronological Split)",
   benchmarkDisclaimer:
     "Offline algorithmic benchmark evaluated on synthetic steel-mill diurnal load profiles. Proves mathematical convergence and baseline improvements (vs 24h persistence and 7-day seasonal MA). Production commissioning requires on-site historical SCADA data ingestion and retraining.",
 };
@@ -409,7 +459,7 @@ export interface PersistedForecastRecord {
 export function generateDeterministicForecast(
   horizonHours: number = 24,
   seed: number = 20261021,
-  baseTelemetry: number[] = HISTORICAL_TELEMETRY.slice(-168).map((p) => p.actualDemandMW)
+  baseTelemetry: number[] = HISTORICAL_TELEMETRY.slice(-168).map((p) => p.actualDemandMW),
 ): PersistedForecastRecord {
   const prng = new DeterministicPRNG(seed);
   const startTime = new Date("2026-10-21T00:00:00Z");
@@ -417,7 +467,7 @@ export function generateDeterministicForecast(
   const p10Margin = MODEL_GOVERNANCE_CARD.residualQuantiles.p10;
   const p90Margin = MODEL_GOVERNANCE_CARD.residualQuantiles.p90;
 
-  let currentHistory = [...baseTelemetry];
+  const currentHistory = [...baseTelemetry];
 
   for (let h = 0; h < horizonHours; h++) {
     const pointTime = new Date(startTime.getTime() + h * 3600 * 1000);
@@ -460,7 +510,7 @@ export function generateDeterministicForecast(
 export function evaluateForecastDrift(
   predictedP50MW: number[],
   actualTelemetryMW: number[],
-  thresholdMape: number = 15.0
+  thresholdMape: number = 15.0,
 ): {
   mape: number;
   driftDetected: boolean;
@@ -492,13 +542,14 @@ export function evaluateForecastDrift(
 
   const mape = Number((totalPctError / n).toFixed(2));
   const driftDetected = mape > thresholdMape;
-  const alertLevel = mape > thresholdMape ? "CRITICAL_DRIFT" : mape > thresholdMape * 0.75 ? "WARNING" : "NORMAL";
+  const alertLevel =
+    mape > thresholdMape ? "CRITICAL_DRIFT" : mape > thresholdMape * 0.75 ? "WARNING" : "NORMAL";
 
   const message = driftDetected
     ? `CRITICAL FORECAST DRIFT: Evaluated MAPE (${mape}%) exceeds governance threshold (${thresholdMape}%). Automated dispatch should be reviewed by plant engineering.`
     : alertLevel === "WARNING"
-    ? `ELEVATED DRIFT WARNING: Evaluated MAPE (${mape}%) approaching threshold (${thresholdMape}%). Monitor incoming SCADA submetering.`
-    : `FORECAST GOVERNANCE VERIFIED: Evaluated MAPE (${mape}%) is well within the ${thresholdMape}% acceptable envelope.`;
+      ? `ELEVATED DRIFT WARNING: Evaluated MAPE (${mape}%) approaching threshold (${thresholdMape}%). Monitor incoming SCADA submetering.`
+      : `FORECAST GOVERNANCE VERIFIED: Evaluated MAPE (${mape}%) is well within the ${thresholdMape}% acceptable envelope.`;
 
   return {
     mape,
@@ -509,4 +560,3 @@ export function evaluateForecastDrift(
     message,
   };
 }
-

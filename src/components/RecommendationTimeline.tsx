@@ -28,7 +28,9 @@ export function RecommendationTimeline({ compact = false }: { compact?: boolean 
       <div className="relative pl-6">
         <div
           className="absolute left-[7px] top-1 bottom-1 w-px"
-          style={{ background: "linear-gradient(to bottom, var(--primary), var(--eco), transparent)" }}
+          style={{
+            background: "linear-gradient(to bottom, var(--primary), var(--eco), transparent)",
+          }}
         />
         <div className="space-y-4">
           {smartRecommendations.map((rec, i) => (

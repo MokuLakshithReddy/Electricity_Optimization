@@ -6,23 +6,17 @@ import { confidenceLabel, type SmartRecommendation } from "@/lib/intel";
 import { cn } from "@/lib/utils";
 import { useEnergyState } from "@/context/EnergyContext";
 
-export function ConfidenceRing({
-  value,
-  size = 44,
-}: {
-  value: number;
-  size?: number;
-}) {
+export function ConfidenceRing({ value, size = 44 }: { value: number; size?: number }) {
   const r = 17;
   const c = 2 * Math.PI * r;
-  
+
   // Dynamic Ring Color
   const strokeColor =
     value >= 90
       ? "#10B981" // Green
       : value >= 70
-      ? "#F59E0B" // Amber
-      : "#EF4444"; // Warning
+        ? "#F59E0B" // Amber
+        : "#EF4444"; // Warning
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
@@ -75,10 +69,10 @@ export function ExplainableCard({
     rec.id === "r1"
       ? "BESS-1 + BESS-2"
       : rec.id === "r2"
-      ? "Captive Unit 3"
-      : rec.id === "r3"
-      ? "Pickling Line"
-      : "BESS-1 Reserve";
+        ? "Captive Unit 3"
+        : rec.id === "r3"
+          ? "Pickling Line"
+          : "BESS-1 Reserve";
 
   return (
     <motion.div
@@ -98,8 +92,8 @@ export function ExplainableCard({
                   rec.category === "Cost"
                     ? "bg-[#E8F5E9] text-[#1B4D3E]"
                     : rec.category === "Reliability"
-                    ? "bg-purple-50 text-purple-700"
-                    : "bg-sky-50 text-sky-700"
+                      ? "bg-purple-50 text-purple-700"
+                      : "bg-sky-50 text-sky-700"
                 }`}
               >
                 {rec.category}
@@ -162,7 +156,9 @@ export function ExplainableCard({
           <Brain className="h-4 w-4 text-[#1B4D3E]" />
           <span>Why did the AI decide this?</span>
         </span>
-        <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-180")} />
+        <ChevronDown
+          className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-180")}
+        />
       </button>
 
       {/* EXPLAINABLE AI EXPANDED PANEL */}
@@ -176,7 +172,6 @@ export function ExplainableCard({
             className="overflow-hidden"
           >
             <div className="pt-2 space-y-4 rounded-2xl bg-[#FAF8F5] border border-[#E6E1D7] p-4 text-xs">
-              
               {/* Decision Statement */}
               <div className="border-b border-[#E6E1D7] pb-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -201,7 +196,9 @@ export function ExplainableCard({
                   </li>
                   <li className="flex items-start gap-1.5">
                     <span className="text-[#1B4D3E] font-bold">•</span>
-                    <span>Charging now avoids grid peak ToD tariffs (₹11.80/kWh) in evening window.</span>
+                    <span>
+                      Charging now avoids grid peak ToD tariffs (₹11.80/kWh) in evening window.
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -290,7 +287,6 @@ export function ExplainableCard({
                   <span>Run What-If</span>
                 </button>
               </div>
-
             </div>
           </motion.div>
         )}

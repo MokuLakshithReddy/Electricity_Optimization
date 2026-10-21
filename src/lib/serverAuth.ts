@@ -1,10 +1,10 @@
 /**
  * IntelliGrid AI - Server-Side Authentication & Session Authority
- * 
+ *
  * Provides server-side credential verification with salted SHA-256 password hashing,
  * server-held HMAC-SHA256 session token generation and cryptographic verification,
  * and server-side RBAC authorization for equipment dispatch operations.
- * 
+ *
  * CRITICAL SECURITY PRINCIPLES:
  * 1. The HMAC signing secret is held strictly on the server and never exposed to the client.
  * 2. Passwords are never hardcoded or bypassed; they are verified against salted hashes.
@@ -14,6 +14,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { sha256, hmacSha256 } from "./cryptoUtils";
+import type { HorizonDispatchInput, AssetConstraints } from "./optimizationEngine";
 
 export type UserRole =
   | "Energy Manager"
@@ -54,8 +55,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   "Plant Manager": ["VIEW_TELEMETRY", "DISPATCH_EXECUTE", "AUDIT_EXPORT", "CONFIGURE_TARIFFS"],
   "Energy Manager": ["VIEW_TELEMETRY", "DISPATCH_EXECUTE", "AUDIT_EXPORT", "CONFIGURE_TARIFFS"],
   "Sustainability Manager": ["VIEW_TELEMETRY", "AUDIT_EXPORT"],
-  "Auditor": ["VIEW_TELEMETRY", "AUDIT_EXPORT"],
-  "Administrator": [
+  Auditor: ["VIEW_TELEMETRY", "AUDIT_EXPORT"],
+  Administrator: [
     "VIEW_TELEMETRY",
     "DISPATCH_EXECUTE",
     "INTERLOCK_OVERRIDE",
@@ -111,7 +112,7 @@ const SERVER_USER_DIRECTORY: Record<
       plantName: "Tata Steel Jamshedpur Works",
     },
   },
-  "admin": {
+  admin: {
     salt: "s4lt_admin_root_airgap_2026",
     // sha256("PlantAdmin#2026!Root" + "s4lt_admin_root_airgap_2026")
     passwordHash: "a1a44e5907409dd78f772ffc4153926cb1812fece0702d41a3bc4258908f972b",
@@ -150,7 +151,9 @@ function createSignedToken(user: UserProfile, expiresAt: number): string {
  * Server-side verification of HMAC-SHA256 session token.
  * Validates cryptographic signature, expiry, and authoritative permissions.
  */
-export function verifyServerSessionToken(token: string | null | undefined): SessionVerificationResult {
+export function verifyServerSessionToken(
+  token: string | null | undefined,
+): SessionVerificationResult {
   if (!token || typeof token !== "string") {
     return { valid: false, user: null, error: "No session token provided" };
   }
@@ -161,11 +164,18 @@ export function verifyServerSessionToken(token: string | null | undefined): Sess
   }
 
   const [base64Payload, signature] = parts;
+  if (!base64Payload || !signature) {
+    return { valid: false, user: null, error: "Malformed token structure" };
+  }
 
   // 1. Verify HMAC-SHA256 signature using server-held secret
   const expectedSignature = hmacSha256(SERVER_HMAC_SECRET, base64Payload);
   if (signature !== expectedSignature) {
-    return { valid: false, user: null, error: "Cryptographic signature mismatch: Token tampered or forged" };
+    return {
+      valid: false,
+      user: null,
+      error: "Cryptographic signature mismatch: Token tampered or forged",
+    };
   }
 
   // 2. Decode payload and verify expiration
@@ -225,15 +235,18 @@ export const serverLogin = createServerFn({ method: "POST" })
 
     if (!isPasswordValid) {
       const count = (attemptRecord?.count || 0) + 1;
-      const lockedUntil = count >= MAX_FAILED_ATTEMPTS ? Date.now() + LOCKOUT_DURATION_MS : undefined;
-      failedAttemptsMap[cleanUser] = { count, lockedUntil };
+      failedAttemptsMap[cleanUser] =
+        count >= MAX_FAILED_ATTEMPTS
+          ? { count, lockedUntil: Date.now() + LOCKOUT_DURATION_MS }
+          : { count };
 
       const remaining = MAX_FAILED_ATTEMPTS - count;
       return {
         success: false,
-        error: count >= MAX_FAILED_ATTEMPTS
-          ? "Account locked for 5 minutes due to excessive failed attempts."
-          : `Invalid credentials. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining before lockout.`,
+        error:
+          count >= MAX_FAILED_ATTEMPTS
+            ? "Account locked for 5 minutes due to excessive failed attempts."
+            : `Invalid credentials. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining before lockout.`,
       };
     }
 
@@ -272,16 +285,18 @@ export const serverVerifySession = createServerFn({ method: "POST" })
  * Server gatekeeper that guarantees equipment operations are NEVER authorized from browser state.
  */
 export const serverAuthorizeDispatch = createServerFn({ method: "POST" })
-  .validator((data: {
-    token: string;
-    requiredPermission: Permission;
-    plan: {
-      batterySetpointMW: number;
-      gridImportSetpointMW: number;
-      captiveSetpointMW: number;
-      generatorSetpointMW: number;
-    };
-  }) => data)
+  .validator(
+    (data: {
+      token: string;
+      requiredPermission: Permission;
+      plan: {
+        batterySetpointMW: number;
+        gridImportSetpointMW: number;
+        captiveSetpointMW: number;
+        generatorSetpointMW: number;
+      };
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const { token, requiredPermission, plan } = data;
 
@@ -308,7 +323,8 @@ export const serverAuthorizeDispatch = createServerFn({ method: "POST" })
     if (plan.gridImportSetpointMW > 250) {
       return {
         authorized: false,
-        error: "Server Interlock Violation: Grid import setpoint exceeds 250 MW contract demand limit.",
+        error:
+          "Server Interlock Violation: Grid import setpoint exceeds 250 MW contract demand limit.",
       };
     }
     if (plan.gridImportSetpointMW < 0) {
@@ -348,7 +364,7 @@ export const serverAuthorizeDispatch = createServerFn({ method: "POST" })
  * the joint 24-hour horizon optimization engine on the server.
  */
 export const serverRunOptimization = createServerFn({ method: "POST" })
-  .validator((data: { token: string; input: any }) => data)
+  .validator((data: { token: string; input: HorizonDispatchInput }) => data)
   .handler(async ({ data }) => {
     const { token, input } = data;
     const sessionCheck = verifyServerSessionToken(token);
@@ -383,7 +399,7 @@ export const serverRunOptimization = createServerFn({ method: "POST" })
  * physical plant constraints, commercial tariffs, or safety limits.
  */
 export const serverUpdateAssetConstraints = createServerFn({ method: "POST" })
-  .validator((data: { token: string; newConstraints: any }) => data)
+  .validator((data: { token: string; newConstraints: Partial<AssetConstraints> }) => data)
   .handler(async ({ data }) => {
     const { token, newConstraints } = data;
     const sessionCheck = verifyServerSessionToken(token);
@@ -408,4 +424,3 @@ export const serverUpdateAssetConstraints = createServerFn({ method: "POST" })
       constraints: newConstraints,
     };
   });
-

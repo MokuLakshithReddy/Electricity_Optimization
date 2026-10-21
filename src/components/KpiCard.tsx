@@ -92,7 +92,9 @@ export function KpiCard({ data }: KpiCardProps) {
     <div className="h-full min-h-[220px] w-full min-w-0 rounded-3xl bg-white border border-[#E6E1D7] p-5 sm:p-6 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden box-border">
       {/* 1. Icon Area + KPI Title Header (No collision, responsive text wrapping) */}
       <div className="flex items-center gap-3 min-w-0">
-        <div className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-2xl", toneStyle.iconBg)}>
+        <div
+          className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-2xl", toneStyle.iconBg)}
+        >
           {getIcon()}
         </div>
         <h4 className="min-w-0 flex-1 text-xs sm:text-sm lg:text-[15px] font-bold uppercase tracking-wider text-[#6B7280] leading-snug whitespace-normal break-words">
@@ -106,7 +108,12 @@ export function KpiCard({ data }: KpiCardProps) {
           {data.value}
         </div>
         {/* 3. Comparison / Status Text */}
-        <p className={cn("mt-1 text-xs sm:text-sm font-semibold truncate min-w-0 max-w-full", toneStyle.changeColor)}>
+        <p
+          className={cn(
+            "mt-1 text-xs sm:text-sm font-semibold truncate min-w-0 max-w-full",
+            toneStyle.changeColor,
+          )}
+        >
           {data.change}
         </p>
       </div>
@@ -126,7 +133,11 @@ export function KpiCard({ data }: KpiCardProps) {
           {data.sparkline.length > 0 && (
             <circle
               cx={width}
-              cy={height - ((data.sparkline[data.sparkline.length - 1] - min) / range) * (height - 8) - 4}
+              cy={
+                height -
+                ((data.sparkline[data.sparkline.length - 1] - min) / range) * (height - 8) -
+                4
+              }
               r="3.5"
               fill={toneStyle.sparkColor}
             />

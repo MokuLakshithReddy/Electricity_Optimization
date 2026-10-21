@@ -79,9 +79,36 @@ function Scenarios() {
   });
 
   const sliders = [
-    { label: "Solar panels", unit: "MW", value: solarMw, set: setSolarMw, max: 300, step: 10, icon: Sun, color: "var(--warn)" },
-    { label: "Battery storage", unit: "MWh", value: batteryMwh, set: setBatteryMwh, max: 800, step: 20, icon: Battery, color: "var(--chart-5)" },
-    { label: "Wind capacity", unit: "MW", value: windMw, set: setWindMw, max: 200, step: 5, icon: Wind, color: "var(--cyan)" },
+    {
+      label: "Solar panels",
+      unit: "MW",
+      value: solarMw,
+      set: setSolarMw,
+      max: 300,
+      step: 10,
+      icon: Sun,
+      color: "var(--warn)",
+    },
+    {
+      label: "Battery storage",
+      unit: "MWh",
+      value: batteryMwh,
+      set: setBatteryMwh,
+      max: 800,
+      step: 20,
+      icon: Battery,
+      color: "var(--chart-5)",
+    },
+    {
+      label: "Wind capacity",
+      unit: "MW",
+      value: windMw,
+      set: setWindMw,
+      max: 200,
+      step: 5,
+      icon: Wind,
+      color: "var(--cyan)",
+    },
   ];
 
   return (
@@ -100,11 +127,16 @@ function Scenarios() {
             <Scale className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold">Multi-objective comparison</h2>
           </div>
-          <p className="text-xs text-muted-foreground">Normalised score per objective (higher is better)</p>
+          <p className="text-xs text-muted-foreground">
+            Normalised score per objective (higher is better)
+          </p>
           <ResponsiveContainer width="100%" height={300}>
             <RadarChart data={radar} outerRadius={100}>
               <PolarGrid stroke="var(--border)" />
-              <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
+              <PolarAngleAxis
+                dataKey="axis"
+                tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+              />
               {strategies.map((s) => (
                 <Radar
                   key={s.key}

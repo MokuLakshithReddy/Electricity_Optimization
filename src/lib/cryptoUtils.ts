@@ -1,14 +1,13 @@
 /**
  * IntelliGrid AI - Cryptographic Utilities
- * 
+ *
  * Implements standard FIPS 180-4 SHA-256 cryptographic hashing and HMAC-SHA256.
  * Zero-dependency, portable across Node.js, Web Workers, browser, and SSR environments.
  */
 
 // Initial hash values (first 32 bits of the fractional parts of the square roots of the first 8 primes 2..19)
 const H_INIT = new Uint32Array([
-  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-  0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ]);
 
 // Round constants (first 32 bits of the fractional parts of the cube roots of the first 64 primes 2..311)

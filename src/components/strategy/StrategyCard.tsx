@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { Star, Check, Info } from "lucide-react";
-import { CalculatedStrategy, formatIndianCurrencyCr, formatExactRupees } from "@/lib/strategyEngine";
+import {
+  CalculatedStrategy,
+  formatIndianCurrencyCr,
+  formatExactRupees,
+} from "@/lib/strategyEngine";
 
 interface StrategyCardProps {
   strategy: CalculatedStrategy;

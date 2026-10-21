@@ -1,6 +1,6 @@
 /**
  * IntelliGrid AI - Client Authentication & Authorization Service
- * 
+ *
  * Production-grade client gateway connected to server-authoritative authentication:
  * - Server-side credential verification with salted SHA-256 hashes (no client passwords)
  * - Server-verified HMAC-SHA256 session tokens
@@ -46,7 +46,7 @@ export const authService = {
    */
   async login(
     usernameInput: string,
-    passwordInput: string
+    passwordInput: string,
   ): Promise<{ success: boolean; user?: UserProfile; token?: string; error?: string }> {
     try {
       const result = await serverLogin({
@@ -78,10 +78,14 @@ export const authService = {
         success: false,
         error: result.error || "Authentication failed. Invalid username or passphrase.",
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Authentication service error. Contact plant IT administration.";
       return {
         success: false,
-        error: err?.message || "Authentication service error. Contact plant IT administration.",
+        error: message,
       };
     }
   },
@@ -92,7 +96,8 @@ export const authService = {
   getToken(): string | null {
     if (typeof window === "undefined") return null;
     try {
-      const stored = sessionStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(AUTH_STORAGE_KEY);
+      const stored =
+        sessionStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(AUTH_STORAGE_KEY);
       if (!stored) return null;
       const session: StoredSession = JSON.parse(stored);
       if (session.expiresAt && Date.now() > session.expiresAt) {
@@ -112,7 +117,8 @@ export const authService = {
   getCurrentUser(): UserProfile | null {
     if (typeof window === "undefined") return null;
     try {
-      const stored = sessionStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(AUTH_STORAGE_KEY);
+      const stored =
+        sessionStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(AUTH_STORAGE_KEY);
       if (!stored) return null;
       const session: StoredSession = JSON.parse(stored);
       if (session.expiresAt && Date.now() > session.expiresAt) {
@@ -169,10 +175,18 @@ export const authService = {
     gridImportSetpointMW: number;
     captiveSetpointMW: number;
     generatorSetpointMW: number;
-  }): Promise<{ authorized: boolean; operatorId?: string; authorizationSignature?: string; error?: string }> {
+  }): Promise<{
+    authorized: boolean;
+    operatorId?: string;
+    authorizationSignature?: string;
+    error?: string;
+  }> {
     const token = this.getToken();
     if (!token) {
-      return { authorized: false, error: "Authentication required: No active session token found." };
+      return {
+        authorized: false,
+        error: "Authentication required: No active session token found.",
+      };
     }
 
     try {
@@ -183,8 +197,13 @@ export const authService = {
           plan,
         },
       });
-    } catch (err: any) {
-      return { authorized: false, error: err?.message || "Server authorization communication error." };
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Server authorization communication error.";
+      return {
+        authorized: false,
+        error: message,
+      };
     }
   },
 

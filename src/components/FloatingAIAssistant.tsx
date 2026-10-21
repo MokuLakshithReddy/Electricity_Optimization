@@ -216,10 +216,7 @@ export function FloatingAIAssistant({ onOpenAssistant }: FloatingAIAssistantProp
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <path
-              d="M0 0C4 0 14 2 16 12C12 7 8 3 0 0Z"
-              fill="currentColor"
-            />
+            <path d="M0 0C4 0 14 2 16 12C12 7 8 3 0 0Z" fill="currentColor" />
             <path
               d="M0 0C4 0 14 2 16 12"
               stroke="rgba(27,77,62,0.3)"
@@ -329,9 +326,7 @@ export function FloatingAIAssistant({ onOpenAssistant }: FloatingAIAssistantProp
                         <span>{m.text}</span>
                       )}
                     </div>
-                    <span className="text-[10px] text-[#6B7280] mt-1 px-1">
-                      {m.timestamp}
-                    </span>
+                    <span className="text-[10px] text-[#6B7280] mt-1 px-1">{m.timestamp}</span>
                   </motion.div>
                 ))}
 

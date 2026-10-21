@@ -9,7 +9,9 @@ export function ImpactSummary({ onViewImpactReport }: ImpactSummaryProps) {
   const energyState = useEnergyState();
 
   const costSavedText = energyState?.energyCostSavedFormatted || "₹18.4 L";
-  const co2AvoidedText = energyState?.co2AvoidedDaily ? `${energyState.co2AvoidedDaily.toLocaleString()} t` : "4,820 t";
+  const co2AvoidedText = energyState?.co2AvoidedDaily
+    ? `${energyState.co2AvoidedDaily.toLocaleString()} t`
+    : "4,820 t";
   const reliabilityText = energyState?.reliability ? `${energyState.reliability}%` : "99.97%";
 
   return (
@@ -30,7 +32,6 @@ export function ImpactSummary({ onViewImpactReport }: ImpactSummaryProps) {
 
       {/* Main 3-Column Grid Layout: 38% | 44% | 18% on Desktop */}
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-[38%_44%_18%] gap-6 lg:gap-8 items-center min-w-0">
-        
         {/* COLUMN 1 — MESSAGE (38% width) */}
         <div className="min-w-0 flex flex-col justify-center">
           {/* Badge */}
@@ -50,7 +51,6 @@ export function ImpactSummary({ onViewImpactReport }: ImpactSummaryProps) {
         {/* COLUMN 2 — IMPACT METRICS (44% width: 3 equal horizontal KPI blocks) */}
         <div className="min-w-0">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-5 items-start min-w-0">
-            
             {/* KPI 1: Cost Savings */}
             <div className="flex flex-col min-w-0">
               <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/10 text-emerald-300 mb-2">
@@ -89,7 +89,6 @@ export function ImpactSummary({ onViewImpactReport }: ImpactSummaryProps) {
                 Power Reliability
               </p>
             </div>
-
           </div>
         </div>
 
@@ -103,7 +102,6 @@ export function ImpactSummary({ onViewImpactReport }: ImpactSummaryProps) {
             <ArrowRight className="h-4 w-4 text-[#133E32]" />
           </button>
         </div>
-
       </div>
     </div>
   );

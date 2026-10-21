@@ -21,9 +21,7 @@ export function AIRecommendation({ onViewOptimization, onSimulate }: AIRecommend
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#1B4D3E] bg-[#E8F5E9] px-2.5 py-0.5 rounded-full border border-emerald-200">
                 AI Recommendation
               </span>
-              <span className="text-xs font-semibold text-emerald-800">
-                94% Confidence
-              </span>
+              <span className="text-xs font-semibold text-emerald-800">94% Confidence</span>
             </div>
 
             <h4 className="font-display text-xl font-bold text-[#1F2937]">
@@ -33,7 +31,8 @@ export function AIRecommendation({ onViewOptimization, onSimulate }: AIRecommend
             <p className="text-xs sm:text-sm text-[#4B5563]">
               {primaryRecommendation.reason}{" "}
               <strong className="text-[#1B4D3E] font-semibold">
-                Expected impact: {primaryRecommendation.impactCost} and {primaryRecommendation.impactCarbon}.
+                Expected impact: {primaryRecommendation.impactCost} and{" "}
+                {primaryRecommendation.impactCarbon}.
               </strong>
             </p>
           </div>

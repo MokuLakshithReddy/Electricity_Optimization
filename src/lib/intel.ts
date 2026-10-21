@@ -40,12 +40,25 @@ export const smartRecommendations: SmartRecommendation[] = [
     dataPoints: 18420,
     why: "Marginal solar energy is priced at ₹2.10/kWh right now, while the forecast discharge value in the 18:00–21:00 ToD block is ₹11.80/kWh — a 5.6× arbitrage spread that clears round-trip losses by a wide margin.",
     factors: [
-      { label: "ToD tariff spread", weight: 46, detail: "₹9.70/kWh delta between charge and discharge windows" },
-      { label: "Solar surplus forecast", weight: 28, detail: "62 MW above internal load for 2h10m (93% calibrated confidence)" },
-      { label: "Battery SoC headroom", weight: 16, detail: "Current 72% → 85% target, 118 MWh usable" },
+      {
+        label: "ToD tariff spread",
+        weight: 46,
+        detail: "₹9.70/kWh delta between charge and discharge windows",
+      },
+      {
+        label: "Solar surplus forecast",
+        weight: 28,
+        detail: "62 MW above internal load for 2h10m (93% calibrated confidence)",
+      },
+      {
+        label: "Battery SoC headroom",
+        weight: 16,
+        detail: "Current 72% → 85% target, 118 MWh usable",
+      },
       { label: "Round-trip efficiency", weight: 10, detail: "90.25% measured over last 30 cycles" },
     ],
-    counterfactual: "If the battery is left idle, 62 MW of PV is curtailed and the evening peak is served from grid import — ₹4.1 lakh higher cost and 18.4 tCO₂ more.",
+    counterfactual:
+      "If the battery is left idle, 62 MW of PV is curtailed and the evening peak is served from grid import — ₹4.1 lakh higher cost and 18.4 tCO₂ more.",
     tone: "eco",
   },
   {
@@ -64,9 +77,14 @@ export const smartRecommendations: SmartRecommendation[] = [
     factors: [
       { label: "Cloud nowcast", weight: 44, detail: "Cell at 18 km, 24 km/h bearing 214°" },
       { label: "Ramp-rate constraint", weight: 31, detail: "Captive unit 3 ramps at 2.8 MW/min" },
-      { label: "Diesel avoidance value", weight: 25, detail: "₹18.40/kWh avoided if the gap is bridged" },
+      {
+        label: "Diesel avoidance value",
+        weight: 25,
+        detail: "₹18.40/kWh avoided if the gap is bridged",
+      },
     ],
-    counterfactual: "Without the pre-ramp, two gensets start at T+40 min, costing ₹96k and adding 4.1 tCO₂.",
+    counterfactual:
+      "Without the pre-ramp, two gensets start at T+40 min, costing ₹96k and adding 4.1 tCO₂.",
     tone: "warn",
   },
   {
@@ -83,9 +101,17 @@ export const smartRecommendations: SmartRecommendation[] = [
     dataPoints: 5140,
     why: "The pickling line has 4 hours of slack against downstream scheduling, and moving it into the 16:00 low-tariff pocket avoids the shoulder rate without touching the hot strip mill sequence.",
     factors: [
-      { label: "Schedule slack", weight: 40, detail: "4h buffer before the galvanising queue is affected" },
+      {
+        label: "Schedule slack",
+        weight: 40,
+        detail: "4h buffer before the galvanising queue is affected",
+      },
       { label: "Tariff pocket", weight: 38, detail: "₹6.80/kWh vs ₹9.60/kWh shoulder rate" },
-      { label: "Thermal continuity", weight: 22, detail: "Bath temperature holds within spec for 110 min" },
+      {
+        label: "Thermal continuity",
+        weight: 22,
+        detail: "Bath temperature holds within spec for 110 min",
+      },
     ],
     counterfactual: "Running on schedule costs ₹2.3 lakh more and offers no throughput benefit.",
     tone: "cyan",
@@ -104,11 +130,24 @@ export const smartRecommendations: SmartRecommendation[] = [
     dataPoints: 26100,
     why: "Feeder B has logged three frequency excursions below 49.6 Hz in the last six hours. A 40% reserve gives 26 minutes of islanded operation, enough to protect the rolling mill from an unplanned trip.",
     factors: [
-      { label: "Grid frequency instability", weight: 52, detail: "3 excursions < 49.6 Hz in 6h on feeder B" },
-      { label: "Critical load exposure", weight: 33, detail: "Rolling mill restart cost ≈ ₹1.4 crore" },
-      { label: "Forecast arbitrage loss", weight: 15, detail: "₹0.9 lakh of foregone discharge value" },
+      {
+        label: "Grid frequency instability",
+        weight: 52,
+        detail: "3 excursions < 49.6 Hz in 6h on feeder B",
+      },
+      {
+        label: "Critical load exposure",
+        weight: 33,
+        detail: "Rolling mill restart cost ≈ ₹1.4 crore",
+      },
+      {
+        label: "Forecast arbitrage loss",
+        weight: 15,
+        detail: "₹0.9 lakh of foregone discharge value",
+      },
     ],
-    counterfactual: "Deep-cycling for arbitrage gains ₹0.9 lakh but exposes ₹1.4 crore of restart risk.",
+    counterfactual:
+      "Deep-cycling for arbitrage gains ₹0.9 lakh but exposes ₹1.4 crore of restart risk.",
     tone: "primary",
   },
   {
@@ -129,7 +168,8 @@ export const smartRecommendations: SmartRecommendation[] = [
       { label: "Stored energy available", weight: 29, detail: "118 MWh banked at ₹2.10/kWh" },
       { label: "Captive headroom", weight: 22, detail: "38 MW spare at ₹5.40/kWh" },
     ],
-    counterfactual: "Importing through the peak adds ₹12.6 lakh and 41.2 tCO₂ for identical output.",
+    counterfactual:
+      "Importing through the peak adds ₹12.6 lakh and 41.2 tCO₂ for identical output.",
     tone: "eco",
   },
   {
@@ -146,11 +186,16 @@ export const smartRecommendations: SmartRecommendation[] = [
     dataPoints: 14780,
     why: "The coastal pressure gradient builds to 8.4 m/s after sunset. Night demand cannot absorb the full ramp, so unstored wind would be curtailed at zero value.",
     factors: [
-      { label: "Wind ramp forecast", weight: 45, detail: "+55 MW for ~4 hours, 86% ensemble agreement" },
+      {
+        label: "Wind ramp forecast",
+        weight: 45,
+        detail: "+55 MW for ~4 hours, 86% ensemble agreement",
+      },
       { label: "Night load deficit", weight: 33, detail: "Demand 310 MW vs 365 MW available" },
       { label: "Curtailment penalty", weight: 22, detail: "Unstored surplus earns ₹0/kWh" },
     ],
-    counterfactual: "Curtailing the ramp wastes 220 MWh of zero-carbon energy and 22.7 tCO₂ of avoidance.",
+    counterfactual:
+      "Curtailing the ramp wastes 220 MWh of zero-carbon energy and 22.7 tCO₂ of avoidance.",
     tone: "cyan",
   },
   {
@@ -171,7 +216,8 @@ export const smartRecommendations: SmartRecommendation[] = [
       { label: "Vibration trend", weight: 34, detail: "2.6 → 4.1 mm/s RMS over 3 weeks" },
       { label: "Low-demand window", weight: 28, detail: "Night load 310 MW, full reserve intact" },
     ],
-    counterfactual: "Deferring to daytime risks an unplanned failure valued at ₹1.48 lakh of emergency dispatch.",
+    counterfactual:
+      "Deferring to daytime risks an unplanned failure valued at ₹1.48 lakh of emergency dispatch.",
     tone: "primary",
   },
   {
@@ -255,7 +301,8 @@ export const strategies: Strategy[] = [
     savings: 0,
     confidence: 100,
     tone: "muted",
-    rationale: "Baseline: operators dispatch on static merit order and react to tariff blocks manually.",
+    rationale:
+      "Baseline: operators dispatch on static merit order and react to tariff blocks manually.",
   },
   {
     key: "cost",
@@ -268,7 +315,8 @@ export const strategies: Strategy[] = [
     savings: 176000000,
     confidence: 92,
     tone: "cyan",
-    rationale: "Aggressive battery arbitrage and load shifting; accepts more captive running when it is cheaper than grid.",
+    rationale:
+      "Aggressive battery arbitrage and load shifting; accepts more captive running when it is cheaper than grid.",
   },
   {
     key: "carbon",
@@ -281,7 +329,8 @@ export const strategies: Strategy[] = [
     savings: 88000000,
     confidence: 89,
     tone: "eco",
-    rationale: "Maximises renewable absorption and curtails diesel entirely; slightly higher cost from storage cycling.",
+    rationale:
+      "Maximises renewable absorption and curtails diesel entirely; slightly higher cost from storage cycling.",
   },
   {
     key: "balanced",
@@ -294,7 +343,8 @@ export const strategies: Strategy[] = [
     savings: 142000000,
     confidence: 95,
     tone: "primary",
-    rationale: "Recommended. Captures 81% of the cost benefit and 71% of the carbon benefit with the highest availability.",
+    rationale:
+      "Recommended. Captures 81% of the cost benefit and 71% of the carbon benefit with the highest availability.",
   },
 ];
 

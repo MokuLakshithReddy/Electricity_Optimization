@@ -1,6 +1,6 @@
 /**
  * IntelliGrid AI - Automated Codebase Dump Generator
- * 
+ *
  * Generates a clean, consolidated single-file markdown representation of the entire
  * codebase for automated audits, compliance verification, and line-by-line model reviews.
  */
@@ -35,11 +35,7 @@ const EXCLUDE_DIRS = new Set([
   "coverage",
 ]);
 
-const EXCLUDE_FILES = new Set([
-  "package-lock.json",
-  "bun.lock",
-  "codebase_dump.md",
-]);
+const EXCLUDE_FILES = new Set(["package-lock.json", "bun.lock", "codebase_dump.md"]);
 
 function getFilesRecursively(dir: string): string[] {
   const results: string[] = [];

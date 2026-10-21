@@ -30,7 +30,12 @@ import {
   Cpu,
   RefreshCw,
 } from "lucide-react";
-import { generateForecast, ForecastPoint, ForecastSummary, ForecastHorizonId } from "@/data/forecastData";
+import {
+  generateForecast,
+  ForecastPoint,
+  ForecastSummary,
+  ForecastHorizonId,
+} from "@/data/forecastData";
 import { useEnergyState } from "@/context/EnergyContext";
 import { cn } from "@/lib/utils";
 
@@ -65,19 +70,56 @@ interface WhatIfScenario {
 }
 
 const WHAT_IF_SCENARIOS: WhatIfScenario[] = [
-  { id: "solar-drop", label: "Solar drops 30%", description: "Cloud cover reduces solar output", solarMod: 0.7 },
-  { id: "wind-none", label: "Wind unavailable", description: "Wind turbines offline (maintenance)", windMod: 0 },
-  { id: "battery-fail", label: "Battery fails", description: "BESS trips, no storage buffer", batteryMod: 0 },
-  { id: "grid-out", label: "Grid unavailable", description: "132kV feeder trip, island mode", gridAvailable: false },
-  { id: "demand-up", label: "Demand +20%", description: "Blast furnace ramp + new loads", demandMod: 1.2 },
-  { id: "generator-none", label: "Generator unavailable", description: "DG scheduled maintenance", solarMod: 1 },
+  {
+    id: "solar-drop",
+    label: "Solar drops 30%",
+    description: "Cloud cover reduces solar output",
+    solarMod: 0.7,
+  },
+  {
+    id: "wind-none",
+    label: "Wind unavailable",
+    description: "Wind turbines offline (maintenance)",
+    windMod: 0,
+  },
+  {
+    id: "battery-fail",
+    label: "Battery fails",
+    description: "BESS trips, no storage buffer",
+    batteryMod: 0,
+  },
+  {
+    id: "grid-out",
+    label: "Grid unavailable",
+    description: "132kV feeder trip, island mode",
+    gridAvailable: false,
+  },
+  {
+    id: "demand-up",
+    label: "Demand +20%",
+    description: "Blast furnace ramp + new loads",
+    demandMod: 1.2,
+  },
+  {
+    id: "generator-none",
+    label: "Generator unavailable",
+    description: "DG scheduled maintenance",
+    solarMod: 1,
+  },
 ];
 
 // ─────── Deterministic energy mix generator ───────
 function getEnergyMixAtIndex(
   idx: number,
   demand: number,
-  energyState: { solarMW: number; windMW: number; batteryMW: number; gridMW: number; captiveMW: number; generatorMW: number }
+  energyState: {
+    solarMW: number;
+    windMW: number;
+    batteryMW: number;
+    gridMW: number;
+    captiveMW: number;
+    generatorMW: number;
+  },
 ): EnergyMixAtPoint {
   const solarFactor = Math.max(0, 1 - (idx / 12) * 0.3 + Math.sin(idx * 0.6) * 0.15);
   const windFactor = 0.9 + Math.sin(idx * 0.3) * 0.15;
@@ -93,13 +135,33 @@ function getEnergyMixAtIndex(
   const carbonIntensity = Math.round(310 + idx * 8 + Math.sin(idx * 0.4) * 20);
   const costPerKwh = Number((8.42 - idx * 0.12 + Math.sin(idx * 0.3) * 0.3).toFixed(2));
 
-  return { time: "", solar, wind, battery, grid, captive, generator, total, demand, carbonIntensity, costPerKwh };
+  return {
+    time: "",
+    solar,
+    wind,
+    battery,
+    grid,
+    captive,
+    generator,
+    total,
+    demand,
+    carbonIntensity,
+    costPerKwh,
+  };
 }
 
 // ─────── Custom Tooltip ───────
-function ForecastTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
+function ForecastTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: unknown }>;
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
-  const p = payload[0]?.payload as (ForecastPoint & { _energyMix?: EnergyMixAtPoint });
+  const p = payload[0]?.payload as ForecastPoint & { _energyMix?: EnergyMixAtPoint };
   if (!p) return null;
   const mix = p._energyMix;
 
@@ -108,7 +170,9 @@ function ForecastTooltip({ active, payload, label }: { active?: boolean; payload
       {/* Header */}
       <div className="bg-[#0F2417] text-white px-4 py-2.5 flex items-center justify-between">
         <span className="font-bold text-base text-white">{p.t}</span>
-        <span className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">Prototype Telemetry</span>
+        <span className="text-[10px] font-medium text-emerald-300 uppercase tracking-wider">
+          Prototype Telemetry
+        </span>
       </div>
 
       <div className="p-3.5 space-y-3">
@@ -128,17 +192,26 @@ function ForecastTooltip({ active, payload, label }: { active?: boolean; payload
 
         <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-center">
           <div className="text-[10px] text-slate-500 font-semibold uppercase">Confidence Band</div>
-          <div className="text-sm font-semibold text-slate-900 mt-0.5">±{Math.round(p.upper - p.predicted)} MW</div>
+          <div className="text-sm font-semibold text-slate-900 mt-0.5">
+            ±{Math.round(p.upper - p.predicted)} MW
+          </div>
         </div>
 
         {/* Energy Mix */}
         {mix && (
           <div className="space-y-1.5 pt-2 border-t border-slate-100">
-            <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Energy Mix</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+              Energy Mix
+            </div>
             {[
               { label: "Solar", val: mix.solar, icon: Sun, color: "text-amber-500" },
               { label: "Wind", val: mix.wind, icon: Wind, color: "text-cyan-500" },
-              { label: "Battery", val: mix.battery, icon: BatteryCharging, color: "text-emerald-600" },
+              {
+                label: "Battery",
+                val: mix.battery,
+                icon: BatteryCharging,
+                color: "text-emerald-600",
+              },
               { label: "Grid", val: mix.grid, icon: Network, color: "text-blue-600" },
             ].map(({ label, val, icon: Icon, color }) => (
               <div key={label} className="flex items-center justify-between">
@@ -171,18 +244,48 @@ function ForecastTooltip({ active, payload, label }: { active?: boolean; payload
 }
 
 // ─────── Peak Marker label (inline SVG g, passed via render function) ───────
-function PeakLabel({ viewBox, peakMW }: { viewBox?: { x?: number | undefined; y?: number | undefined } | undefined; peakMW: number }) {
+function PeakLabel({
+  viewBox,
+  peakMW,
+}: {
+  viewBox?: { x?: number | undefined; y?: number | undefined } | undefined;
+  peakMW: number;
+}) {
   const x = viewBox?.x ?? 0;
   const y = viewBox?.y ?? 0;
   return (
     <g>
-      <circle cx={x} cy={y} r={7} fill="#FF4500" fillOpacity={0.15} stroke="#FF4500" strokeWidth={1.5} />
+      <circle
+        cx={x}
+        cy={y}
+        r={7}
+        fill="#FF4500"
+        fillOpacity={0.15}
+        stroke="#FF4500"
+        strokeWidth={1.5}
+      />
       <circle cx={x} cy={y} r={3.5} fill="#FF4500" />
       <rect x={x - 42} y={y - 44} width={84} height={32} rx={6} fill="#1A1A2E" fillOpacity={0.92} />
-      <text x={x} y={y - 30} textAnchor="middle" fontSize={8} fill="#FF6B4A" fontWeight="700" fontFamily="monospace">
+      <text
+        x={x}
+        y={y - 30}
+        textAnchor="middle"
+        fontSize={8}
+        fill="#FF6B4A"
+        fontWeight="700"
+        fontFamily="monospace"
+      >
         AI PEAK
       </text>
-      <text x={x} y={y - 18} textAnchor="middle" fontSize={10} fill="#FFFFFF" fontWeight="700" fontFamily="monospace">
+      <text
+        x={x}
+        y={y - 18}
+        textAnchor="middle"
+        fontSize={10}
+        fill="#FFFFFF"
+        fontWeight="700"
+        fontFamily="monospace"
+      >
         {peakMW} MW
       </text>
     </g>
@@ -215,7 +318,7 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
         solarMW: Math.round(energyState.solarMW * (activeWhatIf.solarMod ?? 1)),
         windMW: Math.round(energyState.windMW * (activeWhatIf.windMod ?? 1)),
         batteryMW: Math.round(energyState.batteryMW * (activeWhatIf.batteryMod ?? 1)),
-        gridMW: (activeWhatIf.gridAvailable === false) ? 0 : energyState.gridMW,
+        gridMW: activeWhatIf.gridAvailable === false ? 0 : energyState.gridMW,
       }
     : energyState;
 
@@ -260,8 +363,18 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
   const peakThreshold = Math.round(baseDemand * 1.1);
 
   // RAMP RISK color
-  const rampColor = summary.rampRisk === "Low" ? "text-emerald-600" : summary.rampRisk === "Moderate" ? "text-amber-600" : "text-rose-600";
-  const rampBg = summary.rampRisk === "Low" ? "bg-emerald-50 border-emerald-200" : summary.rampRisk === "Moderate" ? "bg-amber-50 border-amber-200" : "bg-rose-50 border-rose-200";
+  const rampColor =
+    summary.rampRisk === "Low"
+      ? "text-emerald-600"
+      : summary.rampRisk === "Moderate"
+        ? "text-amber-600"
+        : "text-rose-600";
+  const rampBg =
+    summary.rampRisk === "Low"
+      ? "bg-emerald-50 border-emerald-200"
+      : summary.rampRisk === "Moderate"
+        ? "bg-amber-50 border-amber-200"
+        : "bg-rose-50 border-rose-200";
 
   // Horizon label mapping
   const horizonLabels: Record<ForecastHorizonId, string> = {
@@ -280,16 +393,20 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
             <div className="flex items-center gap-2">
               <h3 className="font-display text-xl font-bold text-[#1F2937]">AI Demand Forecast</h3>
               {/* Live status badge */}
-              <div className={cn(
-                "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors",
-                liveEnabled
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              )}>
-                <span className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  liveEnabled ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                )} />
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors",
+                  liveEnabled
+                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                    : "bg-slate-100 text-slate-600 border-slate-200",
+                )}
+              >
+                <span
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    liveEnabled ? "bg-emerald-500 animate-pulse" : "bg-slate-400",
+                  )}
+                />
                 {liveEnabled ? "AI Forecast Active" : "Static Mode"}
               </div>
             </div>
@@ -305,7 +422,10 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
               <div className="mt-2 flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-800 font-semibold">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                 Scenario: {activeWhatIf.label}
-                <button onClick={() => setActiveWhatIf(null)} className="ml-1 text-amber-500 hover:text-amber-800">
+                <button
+                  onClick={() => setActiveWhatIf(null)}
+                  className="ml-1 text-amber-500 hover:text-amber-800"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -324,7 +444,7 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
                     "rounded-xl px-3 py-1.5 transition-all",
                     horizon === h
                       ? "bg-[#1B4D3E] text-white shadow-xs font-bold"
-                      : "text-[#6B7280] hover:text-[#1F2937]"
+                      : "text-[#6B7280] hover:text-[#1F2937]",
                   )}
                 >
                   {horizonLabels[h]}
@@ -339,7 +459,7 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all",
                 liveEnabled
                   ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                  : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+                  : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50",
               )}
             >
               <Radio className={cn("w-3.5 h-3.5", liveEnabled && "animate-pulse")} />
@@ -398,7 +518,9 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
             <div className={cn("text-xl font-bold font-display mt-0.5", rampColor)}>
               {summary.rampRisk}
             </div>
-            <div className="text-xs text-slate-500 font-medium">{summary.maxRampRate} MW/hr max</div>
+            <div className="text-xs text-slate-500 font-medium">
+              {summary.maxRampRate} MW/hr max
+            </div>
           </div>
         </div>
       </div>
@@ -408,22 +530,30 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
         {[
           { key: "actual", label: "Actual Demand", color: "#2563EB", dash: false },
           { key: "predicted", label: "Predicted Demand", color: "#1B4D3E", dash: true },
-          { key: "confidence", label: "Confidence Band", color: "#10B981", dash: false, area: true },
+          {
+            key: "confidence",
+            label: "Confidence Band",
+            color: "#10B981",
+            dash: false,
+            area: true,
+          },
         ].map(({ key, label, color, dash, area }) => (
           <button
             key={key}
             onClick={() => setLegendVisible((v) => ({ ...v, [key]: !v[key as keyof typeof v] }))}
             className={cn(
               "flex items-center gap-1.5 text-xs font-medium transition-opacity",
-              !legendVisible[key as keyof typeof legendVisible] && "opacity-40"
+              !legendVisible[key as keyof typeof legendVisible] && "opacity-40",
             )}
           >
             {area ? (
               <span className="w-8 h-3 rounded bg-emerald-200 border border-emerald-400 opacity-70" />
             ) : (
               <span className="flex items-center">
-                <span style={{ borderColor: color, borderStyle: dash ? "dashed" : "solid" }}
-                  className="w-8 h-0 border-b-2 inline-block" />
+                <span
+                  style={{ borderColor: color, borderStyle: dash ? "dashed" : "solid" }}
+                  className="w-8 h-0 border-b-2 inline-block"
+                />
               </span>
             )}
             <span className="text-slate-700">{label}</span>
@@ -481,14 +611,26 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
               y2={peakThreshold}
               fill="#FEF3C7"
               fillOpacity={0.5}
-              label={{ value: "HIGH", position: "insideTopRight", fontSize: 9, fill: "#D97706", fontWeight: 700 }}
+              label={{
+                value: "HIGH",
+                position: "insideTopRight",
+                fontSize: 9,
+                fill: "#D97706",
+                fontWeight: 700,
+              }}
             />
             <ReferenceArea
               y1={peakThreshold}
               y2={peakThreshold + 100}
               fill="#FEE2E2"
               fillOpacity={0.5}
-              label={{ value: "PEAK RISK", position: "insideTopRight", fontSize: 9, fill: "#DC2626", fontWeight: 700 }}
+              label={{
+                value: "PEAK RISK",
+                position: "insideTopRight",
+                fontSize: 9,
+                fill: "#DC2626",
+                fontWeight: 700,
+              }}
             />
 
             {/* Confidence band (only if visible) */}
@@ -617,7 +759,9 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
         {/* Reason panel */}
         {showReasonPanel && (
           <div className="mt-4 pt-4 border-t border-emerald-200 space-y-2">
-            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">WHY?</div>
+            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              WHY?
+            </div>
             {[
               `Demand forecast shows a ${summary.predictedPeak} MW peak ${summary.peakTime}.`,
               `Solar availability is expected to fall as the afternoon progresses.`,
@@ -642,10 +786,12 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
             "flex items-center gap-2 text-xs font-semibold border rounded-xl px-3 py-2 transition-all w-full sm:w-auto",
             showWhatIf
               ? "bg-amber-50 text-amber-800 border-amber-300"
-              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100",
           )}
         >
-          <AlertTriangle className={cn("w-3.5 h-3.5", showWhatIf ? "text-amber-600" : "text-slate-400")} />
+          <AlertTriangle
+            className={cn("w-3.5 h-3.5", showWhatIf ? "text-amber-600" : "text-slate-400")}
+          />
           What happens if...?
         </button>
 
@@ -669,12 +815,14 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
               {WHAT_IF_SCENARIOS.map((scenario) => (
                 <button
                   key={scenario.id}
-                  onClick={() => setActiveWhatIf(activeWhatIf?.id === scenario.id ? null : scenario)}
+                  onClick={() =>
+                    setActiveWhatIf(activeWhatIf?.id === scenario.id ? null : scenario)
+                  }
                   className={cn(
                     "flex flex-col items-start text-left p-2.5 rounded-xl border text-xs transition-all",
                     activeWhatIf?.id === scenario.id
                       ? "bg-amber-200 border-amber-500 text-amber-900"
-                      : "bg-white border-amber-100 text-slate-700 hover:border-amber-400"
+                      : "bg-white border-amber-100 text-slate-700 hover:border-amber-400",
                   )}
                 >
                   <span className="font-semibold">{scenario.label}</span>
@@ -691,7 +839,9 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   <div className="p-2 rounded-lg bg-slate-50">
-                    <div className="font-bold text-slate-900">{effectiveState.totalDemandMW} MW</div>
+                    <div className="font-bold text-slate-900">
+                      {effectiveState.totalDemandMW} MW
+                    </div>
                     <div className="text-[10px] text-slate-500">Demand</div>
                   </div>
                   <div className="p-2 rounded-lg bg-slate-50">
@@ -701,13 +851,30 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
                     <div className="text-[10px] text-slate-500">Energy Cost</div>
                   </div>
                   <div className="p-2 rounded-lg bg-slate-50">
-                    <div className={cn("font-bold", (activeWhatIf.solarMod ?? 1) < 1 || (activeWhatIf.windMod ?? 1) < 1 ? "text-rose-600" : "text-emerald-700")}>
-                      {Math.round(((effectiveState.solarMW + effectiveState.windMW) / Math.max(1, effectiveState.totalDemandMW)) * 100)}%
+                    <div
+                      className={cn(
+                        "font-bold",
+                        (activeWhatIf.solarMod ?? 1) < 1 || (activeWhatIf.windMod ?? 1) < 1
+                          ? "text-rose-600"
+                          : "text-emerald-700",
+                      )}
+                    >
+                      {Math.round(
+                        ((effectiveState.solarMW + effectiveState.windMW) /
+                          Math.max(1, effectiveState.totalDemandMW)) *
+                          100,
+                      )}
+                      %
                     </div>
                     <div className="text-[10px] text-slate-500">Renewable</div>
                   </div>
                   <div className="p-2 rounded-lg bg-slate-50">
-                    <div className={cn("font-bold", activeWhatIf.gridAvailable === false ? "text-rose-600" : "text-emerald-700")}>
+                    <div
+                      className={cn(
+                        "font-bold",
+                        activeWhatIf.gridAvailable === false ? "text-rose-600" : "text-emerald-700",
+                      )}
+                    >
                       {activeWhatIf.gridAvailable === false ? "96.4%" : "99.8%"}
                     </div>
                     <div className="text-[10px] text-slate-500">Reliability</div>
@@ -729,12 +896,19 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
                   <Zap className="w-4 h-4 text-rose-600" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-rose-600">AI Predicted Peak</div>
-                  <div className="text-2xl font-bold font-display text-slate-900">{summary.predictedPeak} MW</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-rose-600">
+                    AI Predicted Peak
+                  </div>
+                  <div className="text-2xl font-bold font-display text-slate-900">
+                    {summary.predictedPeak} MW
+                  </div>
                   <div className="text-xs text-slate-500">{summary.peakTime}</div>
                 </div>
               </div>
-              <button onClick={() => setShowPeakInsight(false)} className="text-slate-400 hover:text-slate-700">
+              <button
+                onClick={() => setShowPeakInsight(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -748,13 +922,19 @@ export function ForecastChart({ onSimulateClick }: ForecastChartProps) {
 
             <div className="flex gap-3">
               <button
-                onClick={() => { setShowPeakInsight(false); onSimulateClick?.(); }}
+                onClick={() => {
+                  setShowPeakInsight(false);
+                  onSimulateClick?.();
+                }}
                 className="flex-1 py-2.5 rounded-xl bg-[#1B4D3E] text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
               >
                 View Optimization
               </button>
               <button
-                onClick={() => { setShowPeakInsight(false); setShowWhatIf(true); }}
+                onClick={() => {
+                  setShowPeakInsight(false);
+                  setShowWhatIf(true);
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-[#1B4D3E] text-[#1B4D3E] text-xs font-semibold hover:bg-emerald-50 transition-colors"
               >
                 Simulate Peak

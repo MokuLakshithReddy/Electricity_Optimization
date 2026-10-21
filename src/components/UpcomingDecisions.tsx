@@ -61,7 +61,9 @@ export function UpcomingDecisions({ onViewAll }: UpcomingDecisionsProps) {
             className="flex items-center justify-between rounded-2xl bg-[#FAF8F5] border border-[#E6E1D7] p-3 hover:border-[#1B4D3E]/30 transition-all"
           >
             <div className="flex items-center gap-3">
-              <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${getBg(dec.iconName)}`}>
+              <div
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${getBg(dec.iconName)}`}
+              >
                 {getIcon(dec.iconName)}
               </div>
               <div className="leading-tight">
@@ -69,7 +71,9 @@ export function UpcomingDecisions({ onViewAll }: UpcomingDecisionsProps) {
                   <span className="text-xs font-bold text-[#1F2937]">{dec.action}</span>
                   <span className="text-[10px] font-semibold text-[#6B7280]">{dec.time}</span>
                 </div>
-                <p className="text-[11px] text-[#6B7280] truncate max-w-[170px] mt-0.5">{dec.reason}</p>
+                <p className="text-[11px] text-[#6B7280] truncate max-w-[170px] mt-0.5">
+                  {dec.reason}
+                </p>
               </div>
             </div>
 

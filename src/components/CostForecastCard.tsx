@@ -36,7 +36,9 @@ export function CostForecastCard() {
 
       {/* Main Metric */}
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Projected Energy Cost</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
+          Projected Energy Cost
+        </p>
         <h3 className="font-display text-3xl font-extrabold text-[#1F2937] tracking-tight mt-1">
           {costForecastData.monthlyProjectedCost}
         </h3>
@@ -67,7 +69,9 @@ export function CostForecastCard() {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-[#1B4D3E]">Potential AI Savings</p>
-            <p className="text-xs font-bold text-[#1F2937]">{costForecastData.potentialAiSavings}</p>
+            <p className="text-xs font-bold text-[#1F2937]">
+              {costForecastData.potentialAiSavings}
+            </p>
           </div>
         </div>
         <span className="text-[11px] font-bold text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">

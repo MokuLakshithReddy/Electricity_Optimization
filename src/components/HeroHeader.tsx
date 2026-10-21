@@ -31,15 +31,25 @@ export function HeroHeader({
           {/* Transmission Tower */}
           <path d="M 480 220 L 520 40 L 560 220 M 495 150 L 545 150 M 505 100 L 535 100 M 480 150 L 560 150" />
           {/* Wind Turbine 1 */}
-          <path d="M 380 220 L 380 90 M 380 90 L 350 70 M 380 90 L 410 70 M 380 90 L 380 120" strokeWidth="2" />
+          <path
+            d="M 380 220 L 380 90 M 380 90 L 350 70 M 380 90 L 410 70 M 380 90 L 380 120"
+            strokeWidth="2"
+          />
           <circle cx="380" cy="90" r="4" fill="currentColor" />
           {/* Wind Turbine 2 */}
-          <path d="M 430 220 L 430 110 M 430 110 L 410 95 M 430 110 L 450 95 M 430 110 L 430 135" strokeWidth="1.8" />
+          <path
+            d="M 430 220 L 430 110 M 430 110 L 410 95 M 430 110 L 450 95 M 430 110 L 430 135"
+            strokeWidth="1.8"
+          />
           <circle cx="430" cy="110" r="3" fill="currentColor" />
           {/* Solar Panel Grid */}
           <path d="M 220 180 L 320 180 L 340 220 L 200 220 Z M 220 180 L 200 220 M 270 180 L 260 220 M 320 180 L 340 220 M 210 200 L 330 200" />
           {/* Steel Plant Silhouettes & Chimney */}
-          <path d="M 80 220 L 80 140 L 140 140 L 140 220 M 140 170 L 190 170 L 190 220 M 100 140 L 100 100 L 120 100 L 120 140" fill="currentColor" fillOpacity="0.1" />
+          <path
+            d="M 80 220 L 80 140 L 140 140 L 140 220 M 140 170 L 190 170 L 190 220 M 100 140 L 100 100 L 120 100 L 120 140"
+            fill="currentColor"
+            fillOpacity="0.1"
+          />
           <path d="M 105 100 C 105 70 125 60 110 40" strokeDasharray="3 3" />
         </svg>
       </div>
@@ -62,7 +72,8 @@ export function HeroHeader({
 
           {/* Subtitle */}
           <p className="mt-3 text-sm sm:text-base text-[#6B7280] leading-relaxed max-w-xl">
-            AI-powered energy orchestration that continuously balances cost, carbon and reliability across industrial energy sources.
+            AI-powered energy orchestration that continuously balances cost, carbon and reliability
+            across industrial energy sources.
           </p>
         </div>
 

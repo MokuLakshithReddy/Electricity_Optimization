@@ -16,9 +16,7 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
         </label>
         <div className="relative flex items-center">
           {icon && (
-            <div className="absolute left-3.5 pointer-events-none text-slate-400">
-              {icon}
-            </div>
+            <div className="absolute left-3.5 pointer-events-none text-slate-400">{icon}</div>
           )}
           <input
             ref={ref}
@@ -31,7 +29,7 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
         </div>
       </div>
     );
-  }
+  },
 );
 
 InputField.displayName = "InputField";

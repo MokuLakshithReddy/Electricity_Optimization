@@ -12,7 +12,6 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 
-
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -35,7 +34,9 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+import type { ErrorComponentProps } from "@tanstack/react-router";
+
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error("Application Error:", error);
   const router = useRouter();
 
@@ -134,7 +135,6 @@ function RootComponent() {
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster position="top-right" />
-
     </QueryClientProvider>
   );
 }

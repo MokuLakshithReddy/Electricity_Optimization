@@ -57,16 +57,108 @@ export type HourlyForecastPoint = {
 };
 
 export const forecast24h: HourlyForecastPoint[] = [
-  { time: "12 AM", demand: 380, solar: 0, wind: 95, grid: 240, battery: 45, price: 4.8, carbonIntensity: 420 },
-  { time: "3 AM", demand: 360, solar: 0, wind: 110, grid: 205, battery: 45, price: 4.5, carbonIntensity: 390 },
-  { time: "6 AM", demand: 420, solar: 25, wind: 80, grid: 265, battery: 50, price: 5.8, carbonIntensity: 460 },
-  { time: "9 AM", demand: 510, solar: 140, wind: 65, grid: 255, battery: 50, price: 7.2, carbonIntensity: 430 },
-  { time: "12 PM", demand: 560, solar: 210, wind: 55, grid: 220, battery: 75, price: 6.5, carbonIntensity: 320 },
-  { time: "3 PM", demand: 540, solar: 175, wind: 60, grid: 225, battery: 80, price: 6.8, carbonIntensity: 350 },
-  { time: "6 PM", demand: 580, solar: 40, wind: 85, grid: 375, battery: 80, price: 11.8, carbonIntensity: 580, isOptimalWindow: true },
-  { time: "8 PM", demand: 560, solar: 0, wind: 95, grid: 385, battery: 80, price: 11.5, carbonIntensity: 560, isOptimalWindow: true },
-  { time: "9 PM", demand: 500, solar: 0, wind: 105, grid: 325, battery: 70, price: 9.2, carbonIntensity: 490 },
-  { time: "12 AM", demand: 410, solar: 0, wind: 100, grid: 260, battery: 50, price: 5.2, carbonIntensity: 410 },
+  {
+    time: "12 AM",
+    demand: 380,
+    solar: 0,
+    wind: 95,
+    grid: 240,
+    battery: 45,
+    price: 4.8,
+    carbonIntensity: 420,
+  },
+  {
+    time: "3 AM",
+    demand: 360,
+    solar: 0,
+    wind: 110,
+    grid: 205,
+    battery: 45,
+    price: 4.5,
+    carbonIntensity: 390,
+  },
+  {
+    time: "6 AM",
+    demand: 420,
+    solar: 25,
+    wind: 80,
+    grid: 265,
+    battery: 50,
+    price: 5.8,
+    carbonIntensity: 460,
+  },
+  {
+    time: "9 AM",
+    demand: 510,
+    solar: 140,
+    wind: 65,
+    grid: 255,
+    battery: 50,
+    price: 7.2,
+    carbonIntensity: 430,
+  },
+  {
+    time: "12 PM",
+    demand: 560,
+    solar: 210,
+    wind: 55,
+    grid: 220,
+    battery: 75,
+    price: 6.5,
+    carbonIntensity: 320,
+  },
+  {
+    time: "3 PM",
+    demand: 540,
+    solar: 175,
+    wind: 60,
+    grid: 225,
+    battery: 80,
+    price: 6.8,
+    carbonIntensity: 350,
+  },
+  {
+    time: "6 PM",
+    demand: 580,
+    solar: 40,
+    wind: 85,
+    grid: 375,
+    battery: 80,
+    price: 11.8,
+    carbonIntensity: 580,
+    isOptimalWindow: true,
+  },
+  {
+    time: "8 PM",
+    demand: 560,
+    solar: 0,
+    wind: 95,
+    grid: 385,
+    battery: 80,
+    price: 11.5,
+    carbonIntensity: 560,
+    isOptimalWindow: true,
+  },
+  {
+    time: "9 PM",
+    demand: 500,
+    solar: 0,
+    wind: 105,
+    grid: 325,
+    battery: 70,
+    price: 9.2,
+    carbonIntensity: 490,
+  },
+  {
+    time: "12 AM",
+    demand: 410,
+    solar: 0,
+    wind: 100,
+    grid: 260,
+    battery: 50,
+    price: 5.2,
+    carbonIntensity: 410,
+  },
 ];
 
 export const weeklyForecast = [
@@ -93,7 +185,7 @@ export function generateForecast(
     batteryMW: number;
     gridMW: number;
     activeScenario?: string;
-  }
+  },
 ): { points: ForecastPoint[]; summary: ForecastSummary } {
   const baseDemand = energyState.totalDemandMW || 520;
   const solarFactor = energyState.solarMW / 145;
@@ -157,8 +249,19 @@ export function generateForecast(
     }
   } else if (horizon === "6h") {
     const labels = [
-      "Now", "+30m", "+1h", "+1.5h", "+2h", "+2.5h",
-      "+3h", "+3.5h", "+4h", "+4.5h", "+5h", "+5.5h", "+6h",
+      "Now",
+      "+30m",
+      "+1h",
+      "+1.5h",
+      "+2h",
+      "+2.5h",
+      "+3h",
+      "+3.5h",
+      "+4h",
+      "+4.5h",
+      "+5h",
+      "+5.5h",
+      "+6h",
     ];
 
     for (let i = 0; i < labels.length; i++) {
@@ -188,8 +291,16 @@ export function generateForecast(
   } else {
     // 24h Horizon: predict each 2-3 hour block using chronological model
     const hours = [
-      "12 AM", "3 AM", "6 AM", "9 AM", "12 PM",
-      "3 PM", "6 PM", "8 PM", "9 PM", "12 AM",
+      "12 AM",
+      "3 AM",
+      "6 AM",
+      "9 AM",
+      "12 PM",
+      "3 PM",
+      "6 PM",
+      "8 PM",
+      "9 PM",
+      "12 AM",
     ];
     const hourMap = [0, 3, 6, 9, 12, 15, 18, 20, 21, 24];
 
@@ -219,7 +330,7 @@ export function generateForecast(
   const peakTime = peakPoint.t === "Now" ? "Current" : peakPoint.t;
 
   const avgUncertainty = Math.round(
-    points.reduce((acc, p) => acc + (p.upper - p.predicted), 0) / points.length
+    points.reduce((acc, p) => acc + (p.upper - p.predicted), 0) / points.length,
   );
 
   let maxRamp = 0;

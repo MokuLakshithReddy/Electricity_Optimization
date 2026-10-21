@@ -60,14 +60,16 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
     }
   };
 
-  const handleSelectAccount = (acc: typeof DEMO_ACCOUNTS[0]) => {
+  const handleSelectAccount = (acc: (typeof DEMO_ACCOUNTS)[0]) => {
     setUsername(acc.username);
     setPassword(acc.pass);
     setErrorMsg(null);
   };
 
   const handleForgotPassword = () => {
-    alert("Password reset request logged for Plant Security Administrator. Please contact SCADA IT desk.");
+    alert(
+      "Password reset request logged for Plant Security Administrator. Please contact SCADA IT desk.",
+    );
   };
 
   return (

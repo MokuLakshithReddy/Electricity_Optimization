@@ -1,6 +1,14 @@
 import React from "react";
 import { X, Activity, ShieldCheck, Gauge, AlertTriangle, Cpu, Zap, Lock, Info } from "lucide-react";
-import { SUBMETERS, BESS_STATUS, GENERATOR_FLEET, ACTIVE_ALARMS, AUDIT_LOG, SCADA_SIMULATION_METADATA, SITE_SAFETY_VALIDATION } from "@/lib/scadaSystem";
+import {
+  SUBMETERS,
+  BESS_STATUS,
+  GENERATOR_FLEET,
+  ACTIVE_ALARMS,
+  AUDIT_LOG,
+  SCADA_SIMULATION_METADATA,
+  SITE_SAFETY_VALIDATION,
+} from "@/lib/scadaSystem";
 
 interface ScadaModalProps {
   isOpen: boolean;
@@ -65,11 +73,16 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
           <div className="mt-3 pt-3 border-t border-amber-200/60">
             <div className="text-[11px] font-bold text-amber-950 uppercase tracking-wider mb-2 flex items-center justify-between">
               <span>Required Site Validation Milestones Before Commissioning</span>
-              <span className="text-[10px] text-amber-800 font-normal">0 of 5 Validated (Pre-Commissioning Stage)</span>
+              <span className="text-[10px] text-amber-800 font-normal">
+                0 of 5 Validated (Pre-Commissioning Stage)
+              </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {SITE_SAFETY_VALIDATION.checklist.map((item) => (
-                <div key={item.id} className="p-2.5 rounded-xl bg-white/70 border border-amber-200 text-xs space-y-1">
+                <div
+                  key={item.id}
+                  className="p-2.5 rounded-xl bg-white/70 border border-amber-200 text-xs space-y-1"
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-[#1F2937] text-[11px]">{item.title}</span>
                     <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
@@ -77,7 +90,9 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
                     </span>
                   </div>
                   <p className="text-[10px] text-[#6B7280] leading-tight">{item.description}</p>
-                  <p className="text-[9px] text-amber-900 font-mono italic">Sign-off: {item.requiredAuthority}</p>
+                  <p className="text-[9px] text-amber-900 font-mono italic">
+                    Sign-off: {item.requiredAuthority}
+                  </p>
                 </div>
               ))}
             </div>
@@ -113,13 +128,19 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
                   <tr key={m.meterId} className="hover:bg-[#FAF8F5] transition-colors">
                     <td className="py-2.5 px-3">
                       <span className="font-bold text-[#1F2937] block">{m.name}</span>
-                      <span className="font-mono text-[10px] text-[#6B7280]">{m.meterId} · {m.location}</span>
+                      <span className="font-mono text-[10px] text-[#6B7280]">
+                        {m.meterId} · {m.location}
+                      </span>
                     </td>
-                    <td className="py-2.5 px-2 font-mono font-bold text-[#1F2937]">{m.activePowerMW}</td>
+                    <td className="py-2.5 px-2 font-mono font-bold text-[#1F2937]">
+                      {m.activePowerMW}
+                    </td>
                     <td className="py-2.5 px-2 font-mono text-[#6B7280]">{m.reactivePowerMVAR}</td>
                     <td className="py-2.5 px-2 font-mono">{m.voltageKV}</td>
                     <td className="py-2.5 px-2 font-mono">{m.frequencyHz} Hz</td>
-                    <td className="py-2.5 px-2 font-mono font-semibold text-emerald-700">{m.powerFactor} lag</td>
+                    <td className="py-2.5 px-2 font-mono font-semibold text-emerald-700">
+                      {m.powerFactor} lag
+                    </td>
                     <td className="py-2.5 px-2 font-mono text-[#6B7280]">{m.thdCurrentPct}%</td>
                     <td className="py-2.5 px-2 text-right">
                       <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-100 text-slate-700">
@@ -149,15 +170,21 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="bg-white p-2 rounded-xl border border-[#E6E1D7]">
                 <span className="text-[10px] text-[#6B7280] block">Pack Voltage</span>
-                <span className="font-mono font-bold text-xs text-[#1F2937]">{BESS_STATUS.packVoltageV} V</span>
+                <span className="font-mono font-bold text-xs text-[#1F2937]">
+                  {BESS_STATUS.packVoltageV} V
+                </span>
               </div>
               <div className="bg-white p-2 rounded-xl border border-[#E6E1D7]">
                 <span className="text-[10px] text-[#6B7280] block">DC Current</span>
-                <span className="font-mono font-bold text-xs text-[#1F2937]">{BESS_STATUS.dcCurrentA} A</span>
+                <span className="font-mono font-bold text-xs text-[#1F2937]">
+                  {BESS_STATUS.dcCurrentA} A
+                </span>
               </div>
               <div className="bg-white p-2 rounded-xl border border-[#E6E1D7]">
                 <span className="text-[10px] text-[#6B7280] block">Max Cell Temp</span>
-                <span className="font-mono font-bold text-xs text-emerald-700">{BESS_STATUS.maxCellTempC}°C</span>
+                <span className="font-mono font-bold text-xs text-emerald-700">
+                  {BESS_STATUS.maxCellTempC}°C
+                </span>
               </div>
             </div>
           </div>
@@ -173,14 +200,21 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
             </div>
             <div className="space-y-2">
               {GENERATOR_FLEET.map((g) => (
-                <div key={g.unitId} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-[#E6E1D7] text-xs">
+                <div
+                  key={g.unitId}
+                  className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-[#E6E1D7] text-xs"
+                >
                   <div>
                     <span className="font-bold text-[#1F2937] block text-xs">{g.unitName}</span>
-                    <span className="text-[10px] font-mono text-[#6B7280]">{g.unitId} · {g.status}</span>
+                    <span className="text-[10px] font-mono text-[#6B7280]">
+                      {g.unitId} · {g.status}
+                    </span>
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-bold text-[#1F2937]">{g.activePowerMW} MW</span>
-                    <span className="text-[10px] block font-mono text-[#6B7280]">Tank: {g.fuelTankLevelPct}%</span>
+                    <span className="text-[10px] block font-mono text-[#6B7280]">
+                      Tank: {g.fuelTankLevelPct}%
+                    </span>
                   </div>
                 </div>
               ))}
@@ -196,7 +230,10 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
           </h5>
           <div className="rounded-2xl border border-[#E6E1D7] p-3 text-xs space-y-2 bg-[#FAF8F5]">
             {AUDIT_LOG.map((entry) => (
-              <div key={entry.id} className="bg-white p-2.5 rounded-xl border border-[#E6E1D7] space-y-1">
+              <div
+                key={entry.id}
+                className="bg-white p-2.5 rounded-xl border border-[#E6E1D7] space-y-1"
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
@@ -204,10 +241,15 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
                     </span>
                     <span className="font-bold text-[#1F2937]">{entry.action}</span>
                   </div>
-                  <span className="font-mono text-[10px] text-[#6B7280]">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                  <span className="font-mono text-[10px] text-[#6B7280]">
+                    {new Date(entry.timestamp).toLocaleTimeString()}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-[#4B5563]">
-                  <span>Operator: <strong className="font-mono">{entry.operatorId}</strong> · Setpoint: {entry.newSetpoint}</span>
+                  <span>
+                    Operator: <strong className="font-mono">{entry.operatorId}</strong> · Setpoint:{" "}
+                    {entry.newSetpoint}
+                  </span>
                 </div>
                 <div className="text-[10px] font-mono text-[#9CA3AF] truncate bg-slate-50 p-1 rounded border border-slate-100">
                   SHA-256: {entry.hashSha256}
@@ -220,7 +262,8 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
         {/* Footer */}
         <div className="pt-2 flex flex-col sm:flex-row justify-between items-center gap-3 border-t border-[#F3F0EA]">
           <span className="text-xs text-[#6B7280]">
-            Software Watchdog Simulator: <strong className="text-emerald-700">Heartbeat OK</strong> · Reverse Power Relay Armed
+            Software Watchdog Simulator: <strong className="text-emerald-700">Heartbeat OK</strong>{" "}
+            · Reverse Power Relay Armed
           </span>
           <button
             onClick={onClose}

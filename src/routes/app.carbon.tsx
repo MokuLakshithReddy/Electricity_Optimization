@@ -176,7 +176,10 @@ function Carbon() {
           <ResponsiveContainer width="100%" height={230}>
             <RadarChart data={carbon.esgPillars} outerRadius={80}>
               <PolarGrid stroke="var(--border)" />
-              <PolarAngleAxis dataKey="name" tick={{ fill: "var(--muted-foreground)", fontSize: 9 }} />
+              <PolarAngleAxis
+                dataKey="name"
+                tick={{ fill: "var(--muted-foreground)", fontSize: 9 }}
+              />
               <Radar
                 dataKey="score"
                 stroke="var(--eco)"

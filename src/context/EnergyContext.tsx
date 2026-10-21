@@ -1,6 +1,18 @@
-import React, { createContext, useContext, useState, useMemo, ReactNode, useEffect, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useMemo,
+  ReactNode,
+  useEffect,
+  useCallback,
+} from "react";
 import { emissionFactors, tariffRates } from "@/data/emissionFactors";
-import { solveEconomicDispatch, OptimizationResult, DEFAULT_CONSTRAINTS } from "@/lib/optimizationEngine";
+import {
+  solveEconomicDispatch,
+  OptimizationResult,
+  DEFAULT_CONSTRAINTS,
+} from "@/lib/optimizationEngine";
 
 export type EnergyState = {
   totalDemandMW: number;
@@ -94,7 +106,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   const computedState = useMemo(() => {
     const renewableMW = solar + wind;
     const renewableUtilization = Number(
-      (Math.min(100, (renewableMW / Math.max(1, demandMW)) * 100)).toFixed(1)
+      Math.min(100, (renewableMW / Math.max(1, demandMW)) * 100).toFixed(1),
     );
 
     // Modeled savings calculated by the mathematical optimization solver against reference baseline
@@ -137,20 +149,18 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   }, [demandMW, solar, wind, battery, grid, captive, generator, optimizationResult]);
 
   // Update sparklines when state changes
-  const updateSparklines = useCallback((
-    newCostSaved: number,
-    newCO2: number,
-    newRenewable: number,
-    newRel: number
-  ) => {
-    const costLakhs = Number((newCostSaved / 100000).toFixed(1));
-    setSparklines((prev) => ({
-      costSavedHistory: [...prev.costSavedHistory.slice(1), costLakhs],
-      co2AvoidedHistory: [...prev.co2AvoidedHistory.slice(1), newCO2],
-      renewableHistory: [...prev.renewableHistory.slice(1), newRenewable],
-      reliabilityHistory: [...prev.reliabilityHistory.slice(1), newRel],
-    }));
-  }, []);
+  const updateSparklines = useCallback(
+    (newCostSaved: number, newCO2: number, newRenewable: number, newRel: number) => {
+      const costLakhs = Number((newCostSaved / 100000).toFixed(1));
+      setSparklines((prev) => ({
+        costSavedHistory: [...prev.costSavedHistory.slice(1), costLakhs],
+        co2AvoidedHistory: [...prev.co2AvoidedHistory.slice(1), newCO2],
+        renewableHistory: [...prev.renewableHistory.slice(1), newRenewable],
+        reliabilityHistory: [...prev.reliabilityHistory.slice(1), newRel],
+      }));
+    },
+    [],
+  );
 
   const updateSolarMW = (mw: number) => {
     setSolar(mw);
@@ -161,7 +171,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       computedState.energyCostSavedDaily,
       computedState.co2AvoidedDaily,
       computedState.renewableUtilization,
-      computedState.reliability
+      computedState.reliability,
     );
   };
 
@@ -173,7 +183,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
       computedState.energyCostSavedDaily,
       computedState.co2AvoidedDaily,
       computedState.renewableUtilization,
-      computedState.reliability
+      computedState.reliability,
     );
   };
 
@@ -211,6 +221,7 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
   // Directly apply mathematically solved optimal setpoints
   const applyOptimalSchedule = () => {
     const d = optimizationResult.dispatch;
+    if (!d) return;
     setSolar(d.solarMW);
     setWind(d.windMW);
     setBattery(d.batteryDischargeMW);
@@ -232,10 +243,12 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
           currentBatterySOC: batterySOC,
           currentTariffTier: tariffTier,
         });
-        setGrid(opt.dispatch.gridMW);
-        setBattery(opt.dispatch.batteryDischargeMW);
-        setCaptive(opt.dispatch.captiveMW);
-        setGenerator(opt.dispatch.generatorMW);
+        if (opt.dispatch) {
+          setGrid(opt.dispatch.gridMW);
+          setBattery(opt.dispatch.batteryDischargeMW);
+          setCaptive(opt.dispatch.captiveMW);
+          setGenerator(opt.dispatch.generatorMW);
+        }
         break;
       }
       case "battery_failure": {
@@ -249,9 +262,11 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
           currentTariffTier: tariffTier,
           constraints: { batteryCapacityMWh: 0, batteryMaxDischargeMW: 0 },
         });
-        setGrid(opt.dispatch.gridMW);
-        setCaptive(opt.dispatch.captiveMW);
-        setGenerator(opt.dispatch.generatorMW);
+        if (opt.dispatch) {
+          setGrid(opt.dispatch.gridMW);
+          setCaptive(opt.dispatch.captiveMW);
+          setGenerator(opt.dispatch.generatorMW);
+        }
         break;
       }
       case "wind_drop": {
@@ -263,10 +278,12 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
           currentBatterySOC: batterySOC,
           currentTariffTier: tariffTier,
         });
-        setGrid(opt.dispatch.gridMW);
-        setBattery(opt.dispatch.batteryDischargeMW);
-        setCaptive(opt.dispatch.captiveMW);
-        setGenerator(opt.dispatch.generatorMW);
+        if (opt.dispatch) {
+          setGrid(opt.dispatch.gridMW);
+          setBattery(opt.dispatch.batteryDischargeMW);
+          setCaptive(opt.dispatch.captiveMW);
+          setGenerator(opt.dispatch.generatorMW);
+        }
         break;
       }
       case "grid_failure": {
@@ -279,9 +296,11 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
           currentTariffTier: tariffTier,
           isGridAvailable: false,
         });
-        setBattery(opt.dispatch.batteryDischargeMW);
-        setCaptive(opt.dispatch.captiveMW);
-        setGenerator(opt.dispatch.generatorMW);
+        if (opt.dispatch) {
+          setBattery(opt.dispatch.batteryDischargeMW);
+          setCaptive(opt.dispatch.captiveMW);
+          setGenerator(opt.dispatch.generatorMW);
+        }
         break;
       }
       case "demand_spike": {
@@ -294,10 +313,12 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
           currentBatterySOC: batterySOC,
           currentTariffTier: tariffTier,
         });
-        setGrid(opt.dispatch.gridMW);
-        setBattery(opt.dispatch.batteryDischargeMW);
-        setCaptive(opt.dispatch.captiveMW);
-        setGenerator(opt.dispatch.generatorMW);
+        if (opt.dispatch) {
+          setGrid(opt.dispatch.gridMW);
+          setBattery(opt.dispatch.batteryDischargeMW);
+          setCaptive(opt.dispatch.captiveMW);
+          setGenerator(opt.dispatch.generatorMW);
+        }
         break;
       }
       case "battery_expansion": {
@@ -309,10 +330,12 @@ export function EnergyProvider({ children }: { children: ReactNode }) {
           currentTariffTier: tariffTier,
           constraints: { batteryCapacityMWh: 400, batteryMaxDischargeMW: 140 },
         });
-        setBattery(opt.dispatch.batteryDischargeMW);
-        setGrid(opt.dispatch.gridMW);
-        setCaptive(opt.dispatch.captiveMW);
-        setGenerator(opt.dispatch.generatorMW);
+        if (opt.dispatch) {
+          setBattery(opt.dispatch.batteryDischargeMW);
+          setGrid(opt.dispatch.gridMW);
+          setCaptive(opt.dispatch.captiveMW);
+          setGenerator(opt.dispatch.generatorMW);
+        }
         break;
       }
       default:

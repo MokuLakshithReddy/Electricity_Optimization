@@ -62,7 +62,8 @@ function AppShellContent() {
           <ShieldAlert className="w-12 h-12 text-red-500 mx-auto" />
           <h2 className="text-xl font-bold">Plant Access Control Required</h2>
           <p className="text-xs text-slate-400">
-            No active server-verified session detected. You are being redirected to the control centre sign-in.
+            No active server-verified session detected. You are being redirected to the control
+            centre sign-in.
           </p>
           <button
             onClick={() => navigate({ to: "/" })}
@@ -145,12 +146,13 @@ function AppShellContent() {
                     </p>
                     <div className="max-h-80 space-y-1.5 overflow-y-auto">
                       {alerts.map((a) => (
-                        <div key={a.id} className="rounded-2xl p-3 bg-[#FAF8F5] border border-[#E6E1D7] hover:border-[#1B4D3E]/30 transition-all">
+                        <div
+                          key={a.id}
+                          className="rounded-2xl p-3 bg-[#FAF8F5] border border-[#E6E1D7] hover:border-[#1B4D3E]/30 transition-all"
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-xs font-bold text-[#1F2937]">{a.title}</p>
-                            <span className="shrink-0 text-[10px] text-[#6B7280]">
-                              {a.time}
-                            </span>
+                            <span className="shrink-0 text-[10px] text-[#6B7280]">{a.time}</span>
                           </div>
                           <p className="mt-0.5 text-[11px] text-[#6B7280]">{a.detail}</p>
                         </div>
@@ -193,10 +195,7 @@ function AppShellContent() {
       <FloatingAIAssistant />
 
       {/* Interactive What-If Simulator Modal */}
-      <WhatIfSimulatorModal
-        isOpen={simulatorOpen}
-        onClose={() => setSimulatorOpen(false)}
-      />
+      <WhatIfSimulatorModal isOpen={simulatorOpen} onClose={() => setSimulatorOpen(false)} />
     </div>
   );
 }

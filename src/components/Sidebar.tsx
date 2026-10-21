@@ -25,7 +25,7 @@ export const navItems = [
   { to: "/app/forecasts", label: "Forecasting", icon: LineChart },
   { to: "/app/digital-twin", label: "Battery", icon: Boxes },
   { to: "/app/carbon", label: "Carbon & ESG", icon: Leaf },
-  { to: "/app/scenarios" as any, label: "What-If Simulator", icon: Scale },
+  { to: "/app/scenarios", label: "What-If Simulator", icon: Scale },
   { to: "/app/copilot", label: "Alerts", icon: Bell },
   { to: "/app/reports", label: "Reports", icon: FileText },
 ] as const;
@@ -131,8 +131,12 @@ export function Sidebar({ onOpenWhatIf }: SidebarProps) {
                 : "OP"}
             </div>
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="text-xs font-bold text-[#1F2937] truncate">{currentUser?.role || "Operator"}</p>
-              <p className="text-[10px] text-[#6B7280] truncate">{currentUser?.name || "Shift Operations"}</p>
+              <p className="text-xs font-bold text-[#1F2937] truncate">
+                {currentUser?.role || "Operator"}
+              </p>
+              <p className="text-[10px] text-[#6B7280] truncate">
+                {currentUser?.name || "Shift Operations"}
+              </p>
             </div>
           </div>
           <button

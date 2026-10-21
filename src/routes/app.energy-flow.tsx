@@ -136,7 +136,14 @@ function EnergyFlow() {
               <text x="470" y="205" textAnchor="middle" fill="var(--foreground)" fontSize="13">
                 FACTORY
               </text>
-              <text x="470" y="224" textAnchor="middle" fill="var(--eco)" fontSize="14" fontWeight="700">
+              <text
+                x="470"
+                y="224"
+                textAnchor="middle"
+                fill="var(--eco)"
+                fontSize="14"
+                fontWeight="700"
+              >
                 {s.demand.toFixed(0)} MW
               </text>
             </svg>
@@ -166,7 +173,9 @@ function EnergyFlow() {
                 <div className="flex items-center gap-3">
                   <div
                     className="grid h-10 w-10 place-items-center rounded-xl"
-                    style={{ background: `color-mix(in oklab, ${colors[src.key]} 18%, transparent)` }}
+                    style={{
+                      background: `color-mix(in oklab, ${colors[src.key]} 18%, transparent)`,
+                    }}
                   >
                     <Icon className="h-5 w-5" style={{ color: colors[src.key] }} />
                   </div>

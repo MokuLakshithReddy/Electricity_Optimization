@@ -38,7 +38,7 @@ function DashboardContent() {
   const navigate = useNavigate();
   const energyState = useEnergyState();
 
-  const [selectedPlant, setSelectedPlant] = useState<PlantLocation>(plantLocations[0]);
+  const [selectedPlant, setSelectedPlant] = useState<PlantLocation>(plantLocations[0]!);
   const [selectedDate, setSelectedDate] = useState("8 Aug 2026");
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [scadaOpen, setScadaOpen] = useState(false);
@@ -90,7 +90,9 @@ function DashboardContent() {
             Data Provenance: Digital Twin Simulation Sandbox
           </span>
           <span className="text-amber-800 hidden md:inline">
-            All plant metrics, power values, and cost savings are generated from synthetic simulation models. They are NOT live physical plant measurements or certified financial savings.
+            All plant metrics, power values, and cost savings are generated from synthetic
+            simulation models. They are NOT live physical plant measurements or certified financial
+            savings.
           </span>
         </div>
         <span className="bg-amber-200/90 text-amber-950 font-mono font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-amber-300">
@@ -118,7 +120,8 @@ function DashboardContent() {
               </span>
             </div>
             <div className="text-xs text-[#6B7280]">
-              5 Synthetic Submeter Registers • Virtual Inverter 50.02 Hz • Software Watchdog Heartbeat Active
+              5 Synthetic Submeter Registers • Virtual Inverter 50.02 Hz • Software Watchdog
+              Heartbeat Active
             </div>
           </div>
         </div>
@@ -152,9 +155,7 @@ function DashboardContent() {
           />
 
           {/* 5. Current Energy Mix Section */}
-          <SourceMixSection
-            onSelectSource={() => navigate({ to: "/app/energy-flow" })}
-          />
+          <SourceMixSection onSelectSource={() => navigate({ to: "/app/energy-flow" })} />
         </div>
 
         {/* RIGHT COLUMN */}
@@ -169,28 +170,18 @@ function DashboardContent() {
           <CostForecastCard />
 
           {/* 8. Upcoming AI Decisions Schedule */}
-          <UpcomingDecisions
-            onViewAll={() => navigate({ to: "/app/scenarios" })}
-          />
+          <UpcomingDecisions onViewAll={() => navigate({ to: "/app/scenarios" })} />
         </div>
       </div>
 
       {/* 9. Full-Width Bottom Impact Section Banner */}
-      <ImpactSummary
-        onViewImpactReport={() => navigate({ to: "/app/reports" })}
-      />
+      <ImpactSummary onViewImpactReport={() => navigate({ to: "/app/reports" })} />
 
       {/* Interactive What-If Simulator Modal */}
-      <WhatIfSimulatorModal
-        isOpen={simulatorOpen}
-        onClose={() => setSimulatorOpen(false)}
-      />
+      <WhatIfSimulatorModal isOpen={simulatorOpen} onClose={() => setSimulatorOpen(false)} />
 
       {/* Industrial SCADA & Equipment Interlocks Modal */}
-      <ScadaModal
-        isOpen={scadaOpen}
-        onClose={() => setScadaOpen(false)}
-      />
+      <ScadaModal isOpen={scadaOpen} onClose={() => setScadaOpen(false)} />
     </div>
   );
 }

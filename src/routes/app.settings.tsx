@@ -142,7 +142,11 @@ function SettingsPage() {
           </div>
           <div className="mt-4 space-y-2">
             <Toggle label="Autonomous dispatch" hint="Let the copilot execute low-risk actions" />
-            <Toggle label="Aggressive cost optimisation" hint="Prioritise ₹ over reserve margin" defaultOn={false} />
+            <Toggle
+              label="Aggressive cost optimisation"
+              hint="Prioritise ₹ over reserve margin"
+              defaultOn={false}
+            />
             <Toggle label="Carbon-first mode" hint="Weight emissions above marginal cost" />
             <Toggle label="Explain every recommendation" />
           </div>
@@ -180,13 +184,21 @@ function SettingsPage() {
 }
 
 function LiveDataSettingsCard() {
-  const [mode, setMode] = useState<string>(() => localStorage.getItem("intelligrid_data_mode") || "open-meteo");
-  const [apiUrl, setApiUrl] = useState<string>(() => localStorage.getItem("intelligrid_custom_api_url") || "https://api.intelligrid.example.com/v1/telemetry");
+  const [mode, setMode] = useState<string>(
+    () => localStorage.getItem("intelligrid_data_mode") || "open-meteo",
+  );
+  const [apiUrl, setApiUrl] = useState<string>(
+    () =>
+      localStorage.getItem("intelligrid_custom_api_url") ||
+      "https://api.intelligrid.example.com/v1/telemetry",
+  );
 
   const handleSelectMode = (newMode: string) => {
     setMode(newMode);
     localStorage.setItem("intelligrid_data_mode", newMode);
-    toast.success(`Live data source set to ${newMode === "open-meteo" ? "Open-Meteo API" : newMode === "custom-api" ? "Custom REST API" : "Mock Simulation"}`);
+    toast.success(
+      `Live data source set to ${newMode === "open-meteo" ? "Open-Meteo API" : newMode === "custom-api" ? "Custom REST API" : "Mock Simulation"}`,
+    );
   };
 
   const handleSaveApiUrl = (url: string) => {
@@ -195,16 +207,26 @@ function LiveDataSettingsCard() {
   };
 
   return (
-    <GlassCard delay={0.20} className="lg:col-span-2 border-emerald-500/30 bg-emerald-950/10">
+    <GlassCard delay={0.2} className="lg:col-span-2 border-emerald-500/30 bg-emerald-950/10">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Plug className="h-4 w-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-emerald-300">Real Live Data Integration</h2>
         </div>
-        <StatusPill status={mode === "open-meteo" ? "Connected (Open-Meteo)" : mode === "custom-api" ? "Custom API" : "Mock Mode"} tone={mode === "mock" ? "amber" : "eco"} />
+        <StatusPill
+          status={
+            mode === "open-meteo"
+              ? "Connected (Open-Meteo)"
+              : mode === "custom-api"
+                ? "Custom API"
+                : "Mock Mode"
+          }
+          tone={mode === "mock" ? "warn" : "eco"}
+        />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Choose your live data stream source for plant telemetry, weather irradiance, and renewable generation.
+        Choose your live data stream source for plant telemetry, weather irradiance, and renewable
+        generation.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -218,7 +240,7 @@ function LiveDataSettingsCard() {
         >
           <span className="text-sm font-medium text-foreground">Open-Meteo API</span>
           <span className="text-xs text-muted-foreground">
-            Real-time solar radiation ($\text{W/m}^2$), wind speed ($\text{m/s}$), and weather physics.
+            Real-time solar radiation (W/m²), wind speed (m/s), and weather physics.
           </span>
         </button>
 
@@ -268,4 +290,3 @@ function LiveDataSettingsCard() {
     </GlassCard>
   );
 }
-

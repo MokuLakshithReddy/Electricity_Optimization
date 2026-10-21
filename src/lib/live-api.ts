@@ -25,7 +25,7 @@ const DEFAULT_LOCATION_NAME = "Bhadla Grid Zone, IN";
  */
 export async function fetchLiveWeatherData(
   lat = DEFAULT_LAT,
-  lon = DEFAULT_LON
+  lon = DEFAULT_LON,
 ): Promise<LiveWeatherData> {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_speed_100m,shortwave_radiation_instant,direct_normal_irradiance,cloud_cover&timeformat=unixtime`;
 

@@ -27,6 +27,7 @@ import {
   BarChart3,
   CheckCircle2,
   FileCheck,
+  Info,
 } from "lucide-react";
 import { useEnergyState } from "@/context/EnergyContext";
 import {
@@ -72,7 +73,7 @@ function ForecastsPage() {
   // Generate dynamic forecast based on horizon & live central EnergyContext state
   const { points, summary } = useMemo(
     () => generateForecast(horizon, energyState),
-    [horizon, energyState]
+    [horizon, energyState],
   );
 
   // Calculate dynamic Y-axis domain
@@ -81,8 +82,16 @@ function ForecastsPage() {
   const maxY = Math.ceil(Math.max(...allValues) / 20) * 20 + 30;
 
   // Custom Chart Tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ payload: ForecastPoint }>;
+    label?: string;
+  }) => {
+    if (active && payload && payload.length > 0 && payload[0]?.payload) {
       const data: ForecastPoint = payload[0].payload;
       return (
         <div className="rounded-2xl bg-white border border-[#E6E1D7] p-3 shadow-xl text-xs space-y-1.5 min-w-[160px]">
@@ -120,7 +129,8 @@ function ForecastsPage() {
             Forecasting Engine
           </h1>
           <p className="text-xs sm:text-sm text-[#6B7280]">
-            Empirical ARX load model · Holdout Tested MAPE {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% over trailing 120h synthetic test set
+            Empirical ARX load model · Holdout Tested MAPE{" "}
+            {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% over trailing 120h synthetic test set
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -142,14 +152,17 @@ function ForecastsPage() {
       <div className="rounded-2xl bg-amber-50/80 border border-amber-200/90 p-3.5 flex items-start gap-3">
         <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
         <div className="text-xs text-amber-900 leading-relaxed">
-          <strong className="font-semibold">Synthetic Benchmark Protocol:</strong>{" "}
-          The evaluation metrics (2.38% MAPE over 120h holdout) demonstrate algorithmic convergence and benchmark superiority (vs 24h persistence and 7-day seasonal MA) on a standardized synthetic diurnal steel-mill dataset. These results do not claim commissioned plant accuracy on live factory SCADA. Production field deployment requires continuous on-site ingestion of historical plant telemetry.
+          <strong className="font-semibold">Synthetic Benchmark Protocol:</strong> The evaluation
+          metrics (2.38% MAPE over 120h holdout) demonstrate algorithmic convergence and benchmark
+          superiority (vs 24h persistence and 7-day seasonal MA) on a standardized synthetic diurnal
+          steel-mill dataset. These results do not claim commissioned plant accuracy on live factory
+          SCADA. Production field deployment requires continuous on-site ingestion of historical
+          plant telemetry.
         </div>
       </div>
 
       {/* 1. Dynamic Top 4 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
         {/* Card 1: PREDICTED PEAK */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -187,7 +200,10 @@ function ForecastsPage() {
             </span>
             <p className="text-xs text-[#6B7280] font-medium mt-1 flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-              <span>Tested MAPE: {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% (R² {MODEL_GOVERNANCE_CARD.holdoutEvaluation.r2})</span>
+              <span>
+                Tested MAPE: {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% (R²{" "}
+                {MODEL_GOVERNANCE_CARD.holdoutEvaluation.r2})
+              </span>
             </p>
           </div>
         </div>
@@ -204,9 +220,7 @@ function ForecastsPage() {
               </span>
               <span className="text-sm font-bold text-[#6B7280]">MW</span>
             </div>
-            <p className="text-xs text-[#6B7280] font-medium mt-1">
-              95% prediction interval
-            </p>
+            <p className="text-xs text-[#6B7280] font-medium mt-1">95% prediction interval</p>
           </div>
         </div>
 
@@ -229,8 +243,8 @@ function ForecastsPage() {
                 summary.rampRisk === "High"
                   ? "text-rose-600"
                   : summary.rampRisk === "Moderate"
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+                    ? "text-amber-600"
+                    : "text-emerald-600"
               }`}
             >
               {summary.rampRisk}
@@ -241,16 +255,13 @@ function ForecastsPage() {
             </p>
           </div>
         </div>
-
       </div>
 
       {/* 2. Main Forecast Chart Container */}
       <div className="rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h3 className="font-display text-xl font-bold text-[#1F2937]">
-              Demand forecast
-            </h3>
+            <h3 className="font-display text-xl font-bold text-[#1F2937]">Demand forecast</h3>
             <p className="text-xs text-[#6B7280]">Actual vs predicted load (MW)</p>
           </div>
 
@@ -301,12 +312,7 @@ function ForecastsPage() {
 
               <CartesianGrid stroke="#F3F0EA" vertical={false} />
               <XAxis dataKey="t" stroke="#9CA3AF" fontSize={11} tickLine={false} />
-              <YAxis
-                stroke="#9CA3AF"
-                fontSize={11}
-                tickLine={false}
-                domain={[minY, maxY]}
-              />
+              <YAxis stroke="#9CA3AF" fontSize={11} tickLine={false} domain={[minY, maxY]} />
               <Tooltip content={<CustomTooltip />} />
 
               {/* Shaded Area for Confidence Band (lower to upper) */}
@@ -360,7 +366,8 @@ function ForecastsPage() {
             </h4>
 
             <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed">
-              AI recommends increasing battery readiness before peak window to reduce high-tariff grid dependency.
+              AI recommends increasing battery readiness before peak window to reduce high-tariff
+              grid dependency.
             </p>
 
             {/* Stat Badges */}
@@ -435,8 +442,22 @@ function ForecastsPage() {
                 <YAxis stroke="#9CA3AF" fontSize={11} tickLine={false} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="solar" stroke="#F59E0B" strokeWidth={2} fill="url(#solarGrad)" name="Solar PV" />
-                <Area type="monotone" dataKey="wind" stroke="#0284C7" strokeWidth={2} fill="url(#windGrad)" name="Wind Farm" />
+                <Area
+                  type="monotone"
+                  dataKey="solar"
+                  stroke="#F59E0B"
+                  strokeWidth={2}
+                  fill="url(#solarGrad)"
+                  name="Solar PV"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="wind"
+                  stroke="#0284C7"
+                  strokeWidth={2}
+                  fill="url(#windGrad)"
+                  name="Wind Farm"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -513,13 +534,17 @@ function ForecastsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-white p-3 border border-[#E6E1D7]">
-                  <span className="text-[10px] font-bold text-[#6B7280] uppercase">Expected Ramp</span>
+                  <span className="text-[10px] font-bold text-[#6B7280] uppercase">
+                    Expected Ramp
+                  </span>
                   <p className="font-display text-base font-bold text-[#1F2937] mt-0.5">
                     +{summary.maxRampRate} MW/hr
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-3 border border-[#E6E1D7]">
-                  <span className="text-[10px] font-bold text-[#6B7280] uppercase">Peak Window</span>
+                  <span className="text-[10px] font-bold text-[#6B7280] uppercase">
+                    Peak Window
+                  </span>
                   <p className="font-display text-base font-bold text-[#1F2937] mt-0.5">
                     {summary.peakRampWindow}
                   </p>
@@ -598,15 +623,21 @@ function ForecastsPage() {
                 <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
                   <div className="rounded-xl bg-white p-2 border border-[#E6E1D7]">
                     <span className="text-[#6B7280] block">Training Window</span>
-                    <span className="font-bold text-[#1F2937]">{MODEL_GOVERNANCE_CARD.chronologicalSplit.trainHours}h (70%)</span>
+                    <span className="font-bold text-[#1F2937]">
+                      {MODEL_GOVERNANCE_CARD.chronologicalSplit.trainHours}h (70%)
+                    </span>
                   </div>
                   <div className="rounded-xl bg-white p-2 border border-[#E6E1D7]">
                     <span className="text-[#6B7280] block">Validation Window</span>
-                    <span className="font-bold text-[#1F2937]">{MODEL_GOVERNANCE_CARD.chronologicalSplit.valHours}h (13.3%)</span>
+                    <span className="font-bold text-[#1F2937]">
+                      {MODEL_GOVERNANCE_CARD.chronologicalSplit.valHours}h (13.3%)
+                    </span>
                   </div>
                   <div className="rounded-xl bg-white p-2 border border-emerald-200 bg-emerald-50/50">
                     <span className="text-emerald-800 font-semibold block">Holdout Test Set</span>
-                    <span className="font-bold text-emerald-950">{MODEL_GOVERNANCE_CARD.chronologicalSplit.holdoutTestHours}h (16.7%)</span>
+                    <span className="font-bold text-emerald-950">
+                      {MODEL_GOVERNANCE_CARD.chronologicalSplit.holdoutTestHours}h (16.7%)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -640,15 +671,23 @@ function ForecastsPage() {
                         <td className="py-2.5 px-2 font-mono text-emerald-700">
                           {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}%
                         </td>
-                        <td className="py-2.5 px-2 font-mono">{MODEL_GOVERNANCE_CARD.holdoutEvaluation.rmse}</td>
-                        <td className="py-2.5 px-2 font-mono">{MODEL_GOVERNANCE_CARD.holdoutEvaluation.mae}</td>
-                        <td className="py-2.5 px-2 font-mono text-emerald-700">{MODEL_GOVERNANCE_CARD.holdoutEvaluation.r2}</td>
+                        <td className="py-2.5 px-2 font-mono">
+                          {MODEL_GOVERNANCE_CARD.holdoutEvaluation.rmse}
+                        </td>
+                        <td className="py-2.5 px-2 font-mono">
+                          {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mae}
+                        </td>
+                        <td className="py-2.5 px-2 font-mono text-emerald-700">
+                          {MODEL_GOVERNANCE_CARD.holdoutEvaluation.r2}
+                        </td>
                         <td className="py-2.5 px-2 text-right text-emerald-800">Reference</td>
                       </tr>
                       {MODEL_GOVERNANCE_CARD.baselines.map((b) => (
                         <tr key={b.baselineName} className="text-[#4B5563]">
                           <td className="py-2.5 px-3">
-                            <span className="font-medium text-[#1F2937] block">{b.baselineName}</span>
+                            <span className="font-medium text-[#1F2937] block">
+                              {b.baselineName}
+                            </span>
                             <span className="text-[10px] text-[#6B7280]">{b.description}</span>
                           </td>
                           <td className="py-2.5 px-2 font-mono">{b.mape}%</td>

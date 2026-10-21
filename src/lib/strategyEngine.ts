@@ -84,7 +84,7 @@ export function formatExactRupees(croreValue: number): string {
  * Calculates dynamic strategy cards based on changing plant inputs.
  */
 export function calculateStrategies(
-  conditions: PlantConditions = DEFAULT_PLANT_CONDITIONS
+  conditions: PlantConditions = DEFAULT_PLANT_CONDITIONS,
 ): StrategyEngineOutput {
   const {
     solarAvailability,
@@ -106,20 +106,12 @@ export function calculateStrategies(
   // 1. Current Strategy Baseline
   const currentCost = Math.round(1284 * demandFactor * gridPenalty);
   const currentCo2 = Math.round(512 * demandFactor * (2 - (solarFactor + windFactor) * 0.2));
-  const currentRenewable = Math.min(
-    75,
-    Math.round(38 * (solarFactor * 0.6 + windFactor * 0.4))
-  );
+  const currentRenewable = Math.min(75, Math.round(38 * (solarFactor * 0.6 + windFactor * 0.4)));
   const currentReliability = gridAvailable ? 97.8 : 91.2;
 
   // 2. Cost-Optimized Strategy
-  const costCo2 = Math.round(
-    486 * demandFactor * (2.0 - (solarFactor * 0.4 + windFactor * 0.3))
-  );
-  const costRenewable = Math.min(
-    80,
-    Math.round(41 * (solarFactor * 0.5 + windFactor * 0.5))
-  );
+  const costCo2 = Math.round(486 * demandFactor * (2.0 - (solarFactor * 0.4 + windFactor * 0.3)));
+  const costRenewable = Math.min(80, Math.round(41 * (solarFactor * 0.5 + windFactor * 0.5)));
   const costReliability = gridAvailable ? 98.4 : 93.5;
   // Cost savings expand with more renewables or storage
   const baseCostSavings = 176 * (1 + (storageFactor - 1) * 0.15 + (solarFactor - 1) * 0.2);
@@ -127,29 +119,17 @@ export function calculateStrategies(
   const costSavingsCr = currentCost - costAnnualCost;
 
   // 3. Carbon-Optimized Strategy
-  const carbonRenewable = Math.min(
-    95,
-    Math.round(61 * (solarFactor * 0.55 + windFactor * 0.45))
-  );
-  const carbonCo2 = Math.round(
-    388 * demandFactor * (1.8 - (solarFactor * 0.5 + windFactor * 0.5))
-  );
+  const carbonRenewable = Math.min(95, Math.round(61 * (solarFactor * 0.55 + windFactor * 0.45)));
+  const carbonCo2 = Math.round(388 * demandFactor * (1.8 - (solarFactor * 0.5 + windFactor * 0.5)));
   const carbonReliability = gridAvailable ? 98.1 : 92.8;
   const baseCarbonSavings = 88 * (1 + (solarFactor - 1) * 0.3 + (windFactor - 1) * 0.25);
   const carbonAnnualCost = Math.max(850, currentCost - Math.round(baseCarbonSavings));
   const carbonSavingsCr = currentCost - carbonAnnualCost;
 
   // 4. Balanced Strategy (AI Recommended Pareto Optimal)
-  const balancedCost = Math.round(
-    currentCost - (currentCost - costAnnualCost) * 0.8068
-  ); // ~81% of cost benefit
-  const balancedCo2 = Math.round(
-    currentCo2 - (currentCo2 - carbonCo2) * 0.8064
-  ); // ~81% of carbon benefit
-  const balancedRenewable = Math.min(
-    88,
-    Math.round(54 * (solarFactor * 0.5 + windFactor * 0.5))
-  );
+  const balancedCost = Math.round(currentCost - (currentCost - costAnnualCost) * 0.8068); // ~81% of cost benefit
+  const balancedCo2 = Math.round(currentCo2 - (currentCo2 - carbonCo2) * 0.8064); // ~81% of carbon benefit
+  const balancedRenewable = Math.min(88, Math.round(54 * (solarFactor * 0.5 + windFactor * 0.5)));
   const balancedReliability = gridAvailable ? 99.2 : 96.8;
   const balancedSavingsCr = currentCost - balancedCost;
 
@@ -165,16 +145,16 @@ export function calculateStrategies(
 
   const costBenefitCapturedPct = Math.min(
     99,
-    Math.max(1, Math.round(((currentCost - balancedCost) / maxCostBenefit) * 100))
+    Math.max(1, Math.round(((currentCost - balancedCost) / maxCostBenefit) * 100)),
   );
   const carbonBenefitCapturedPct = Math.min(
     99,
-    Math.max(1, Math.round(((currentCo2 - balancedCo2) / maxCarbonBenefit) * 100))
+    Math.max(1, Math.round(((currentCo2 - balancedCo2) / maxCarbonBenefit) * 100)),
   );
 
   const balancedRationaleText = `Captures ${costBenefitCapturedPct}% of the cost benefit and ${carbonBenefitCapturedPct}% of the carbon benefit with the highest availability.`;
 
-  const strategies: Record<string, CalculatedStrategy> = {
+  const strategies: StrategyMap = {
     current: {
       key: "current",
       title: "Current Strategy",
@@ -285,7 +265,8 @@ export function calculateStrategies(
         captivePct: 10,
         backupGeneratorPct: 5,
       },
-      optimizationObjective: "Multi-objective Pareto optimization balancing cost, CO₂, and grid ride-through reserve.",
+      optimizationObjective:
+        "Multi-objective Pareto optimization balancing cost, CO₂, and grid ride-through reserve.",
       constraintsUsed: [
         "40% BESS emergency spinning reserve",
         "ToD arbitrage optimization",

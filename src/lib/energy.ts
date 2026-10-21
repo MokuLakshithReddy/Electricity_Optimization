@@ -244,7 +244,10 @@ export function useLiveEnergy(intervalMs = 5000, preferredMode?: LiveDataSourceM
     let isMounted = true;
 
     async function updateEnergyData() {
-      const mode = preferredMode || (localStorage.getItem("intelligrid_data_mode") as LiveDataSourceMode) || "open-meteo";
+      const mode =
+        preferredMode ||
+        (localStorage.getItem("intelligrid_data_mode") as LiveDataSourceMode) ||
+        "open-meteo";
 
       if (mode === "mock") {
         if (isMounted) setSnap((prev) => makeSnapshot(prev));
@@ -282,7 +285,6 @@ export function useLiveEnergy(intervalMs = 5000, preferredMode?: LiveDataSourceM
 
   return snap;
 }
-
 
 export const inr = (n: number) =>
   "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: n > 1000 ? 0 : 2 });
@@ -348,7 +350,8 @@ export const recommendations = [
   },
   {
     title: "Hold battery reserve at 40%",
-    reason: "Grid frequency excursions detected on feeder B; reserve protects rolling mill continuity.",
+    reason:
+      "Grid frequency excursions detected on feeder B; reserve protects rolling mill continuity.",
     savings: 0,
     carbon: 0,
     confidence: 97,

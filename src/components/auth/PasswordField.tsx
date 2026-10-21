@@ -39,7 +39,7 @@ export const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldPro
         </div>
       </div>
     );
-  }
+  },
 );
 
 PasswordField.displayName = "PasswordField";
