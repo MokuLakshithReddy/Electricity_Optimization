@@ -69,6 +69,14 @@ export const SITE_SAFETY_VALIDATION = {
       status: "PENDING_INDEPENDENT_VALIDATION",
       description: "Hardware security token, optical isolation, and certified edge gateway deployment with independent hardware watchdog timer.",
     },
+    {
+      id: "VAL-NET-06",
+      category: "COMMISSIONING",
+      title: "Dual-Redundant PRP/HSR Network & Heartbeat Watchdog Fail-Safe",
+      requiredAuthority: "Substation Automation & SCADA Network Engineering",
+      status: "PENDING_INDEPENDENT_VALIDATION",
+      description: "Parallel Redundancy Protocol (IEC 62439-3 PRP) dual-ring network with 250ms heartbeat loss watchdog that automatically drops equipment to autonomous local droop governor mode.",
+    },
   ] as SiteValidationMilestone[],
 } as const;
 

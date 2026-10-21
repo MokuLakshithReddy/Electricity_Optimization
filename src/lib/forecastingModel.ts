@@ -1,10 +1,33 @@
 /**
  * IntelliGrid AI - Industrial Time-Series Forecasting & Model Evaluation Engine
  * 
- * Implements an empirically verified autoregressive multi-feature load forecasting model
+ * Implements an autoregressive multi-feature load forecasting model
  * with chronological train/validation/test holdout splitting, benchmark comparisons
  * against standard persistence/moving average baselines, and conformal uncertainty intervals.
+ * 
+ * OPERATIONAL & PROVENANCE NOTICE:
+ * 1. SYNTHETIC BENCHMARK GROUNDING: The 720 hours of historical telemetry used in this
+ *    module are generated via deterministic synthetic diurnal models calibrated to typical
+ *    industrial steel manufacturing operations. While suitable for software demonstration,
+ *    mathematical proof of algorithmic convergence, and baseline comparisons, it does NOT
+ *    constitute empirical proof of predictive accuracy on physical plant SCADA data.
+ * 2. PRE-COMMISSIONING PARAMETERS: The model weights, lag coefficients, and feature importances
+ *    represent pre-commissioning baseline parameters. Production deployment requires retraining
+ *    on revenue-grade physical telemetry, seasonal calibration, and continuous drift monitoring.
  */
+
+export const FORECAST_MODEL_PROVENANCE_AND_LIMITATIONS = {
+  dataSource: "SYNTHETIC_INDUSTRIAL_BENCHMARK_720H" as const,
+  isPhysicalPlantTelemetry: false as const,
+  operationalStatus: "PRE_COMMISSIONING_DEMONSTRATION" as const,
+  reproducibilityProtocol: "Deterministic PRNG with fixed seed over 720 chronological hours",
+  productionPrerequisites: [
+    "Connection to physical substation 0.2S revenue meters via OPC-UA / Modbus TCP",
+    "At least 90 days of verified, un-interpolated on-site historical load data",
+    "Hyperparameter re-tuning and seasonal retraining across summer/winter cycles",
+    "Independent validation of forecast residuals against physical utility billing registers",
+  ],
+};
 
 export interface HistoricalTelemetryPoint {
   timestamp: string; // ISO format

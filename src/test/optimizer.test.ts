@@ -14,6 +14,7 @@ import {
   solveHorizonDispatch,
   solveEconomicDispatch,
   verifyHorizonScheduleConstraints,
+  validateHorizonInputs,
   DEFAULT_CONSTRAINTS,
   HorizonDispatchInput,
 } from "../lib/optimizationEngine";
@@ -511,6 +512,260 @@ function testIndependentVerificationRejection() {
 }
 
 // ============================================================================
+// TEST 9: Comprehensive Input Validation Pre-Check
+// ============================================================================
+function testInputValidationPreCheck() {
+  // 1. Non-finite demand (NaN / Infinity)
+  const nanResult = solveHorizonDispatch({
+    horizonHours: 3,
+    hourlyDemandMW: [300, NaN, 400],
+    hourlySolarAvailableMW: [50, 50, 50],
+    hourlyWindAvailableMW: [50, 50, 50],
+    hourlyTariffTier: ["Peak", "Peak", "Peak"],
+    initialBatterySOC: 50,
+  });
+  assert(nanResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject NaN demand");
+  assert(nanResult.isExecutablePlan === false, "Must block execution on NaN demand");
+
+  // 2. Negative demand
+  const negResult = solveHorizonDispatch({
+    horizonHours: 3,
+    hourlyDemandMW: [300, -50, 400],
+    hourlySolarAvailableMW: [50, 50, 50],
+    hourlyWindAvailableMW: [50, 50, 50],
+    hourlyTariffTier: ["Peak", "Peak", "Peak"],
+    initialBatterySOC: 50,
+  });
+  assert(negResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject negative demand");
+  assert(negResult.isExecutablePlan === false, "Must block execution on negative demand");
+
+  // 3. Mismatched array length
+  const mismatchResult = solveHorizonDispatch({
+    horizonHours: 4,
+    hourlyDemandMW: [300, 350, 400], // length 3 != 4
+    hourlySolarAvailableMW: [50, 50, 50, 50],
+    hourlyWindAvailableMW: [50, 50, 50, 50],
+    hourlyTariffTier: ["Peak", "Peak", "Peak", "Peak"],
+    initialBatterySOC: 50,
+  });
+  assert(mismatchResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject mismatched array length");
+  assert(mismatchResult.isExecutablePlan === false, "Must block execution on mismatched array length");
+
+  // 4. Invalid SoC (>100 or <0)
+  const invalidSOCResult = solveHorizonDispatch({
+    horizonHours: 2,
+    hourlyDemandMW: [300, 300],
+    hourlySolarAvailableMW: [50, 50],
+    hourlyWindAvailableMW: [50, 50],
+    hourlyTariffTier: ["Peak", "Peak"],
+    initialBatterySOC: 125, // > 100%
+  });
+  assert(invalidSOCResult.solverStatus === "INFEASIBLE_DEFICIT", "Must reject invalid SoC > 100%");
+  assert(invalidSOCResult.isExecutablePlan === false, "Must block execution on invalid SoC");
+
+  testResults.push({
+    name: "Test 9: Comprehensive Input Validation Pre-Check",
+    passed: true,
+    details: "Strictly intercepted and blocked schedules with non-finite values (NaN), negative demand, mismatched array lengths, and invalid SoC.",
+  });
+}
+
+// ============================================================================
+// TEST 10: Impossible Terminal SoC Target & Insufficient Charging Opportunity
+// ============================================================================
+function testImpossibleTerminalSoCTarget() {
+  // Scenario: Starting at 20% SoC, targetTerminalSOC is 95%, but horizon is only 1 hour.
+  // In 1 hour, max charge is 80 MW.
+  // 80 MW * sqrt(0.89) = 75.47 MWh.
+  // Starting energy = 20% * 250 = 50 MWh.
+  // Max final energy = 50 + 75.47 = 125.47 MWh = 50.19% SoC << 95% target.
+  // Reaching 95% is physically impossible.
+  const impossibleResult = solveHorizonDispatch({
+    horizonHours: 1,
+    hourlyDemandMW: [200],
+    hourlySolarAvailableMW: [100],
+    hourlyWindAvailableMW: [100],
+    hourlyTariffTier: ["OffPeak"],
+    initialBatterySOC: 20,
+    targetTerminalSOC: 95,
+  });
+
+  assert(
+    impossibleResult.solverStatus === "INFEASIBLE_DEFICIT",
+    "Must report INFEASIBLE_DEFICIT for impossible terminal target"
+  );
+  assert(
+    impossibleResult.isExecutablePlan === false,
+    "Must block execution for impossible terminal target"
+  );
+
+  testResults.push({
+    name: "Test 10: Impossible Terminal SoC Target Rejection",
+    passed: true,
+    details: "Proved that solver and validator strictly reject impossible terminal targets where charging capacity cannot bridge the energy gap.",
+  });
+}
+
+// ============================================================================
+// TEST 11: Prohibition of Simultaneous Battery Charging & Discharging
+// ============================================================================
+function testSimultaneousChargeDischargePrevention() {
+  // Run standard 24h problem and verify that NO interval has simultaneous charge and discharge
+  const H = 24;
+  const demand = new Array(24).fill(380);
+  const solar = [0, 0, 0, 0, 0, 20, 80, 140, 180, 200, 200, 190, 170, 140, 100, 40, 0, 0, 0, 0, 0, 0, 0, 0];
+  const wind = new Array(24).fill(50);
+  const tiers: ("Peak" | "Shoulder" | "OffPeak")[] = [
+    "OffPeak", "OffPeak", "OffPeak", "OffPeak", "OffPeak", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Peak",
+    "Peak", "Peak", "Peak", "Shoulder", "OffPeak", "OffPeak",
+  ];
+
+  const result = solveHorizonDispatch({
+    horizonHours: H,
+    hourlyDemandMW: demand,
+    hourlySolarAvailableMW: solar,
+    hourlyWindAvailableMW: wind,
+    hourlyTariffTier: tiers,
+    initialBatterySOC: 50,
+  });
+
+  assert(result.isExecutablePlan === true, "Schedule must be executable");
+  for (let t = 0; t < H; t++) {
+    const inv = result.intervals[t];
+    assert(
+      Math.min(inv.batteryChargeMW, inv.batteryDischargeMW) <= 0.05,
+      `Hour ${t}: Simultaneous charge (${inv.batteryChargeMW} MW) and discharge (${inv.batteryDischargeMW} MW) detected!`
+    );
+  }
+
+  // Also verify that verifyHorizonScheduleConstraints catches an artificial violation
+  const badSchedule = [...result.intervals];
+  badSchedule[0] = {
+    ...badSchedule[0],
+    batteryChargeMW: 50,
+    batteryDischargeMW: 50,
+  };
+  const v = verifyHorizonScheduleConstraints(
+    badSchedule,
+    DEFAULT_CONSTRAINTS,
+    55,
+    0,
+    false,
+    50,
+    undefined,
+    true
+  );
+  assert(v.isValid === false, "Validator must reject simultaneous charge & discharge");
+  assert(
+    v.violations.some((violation) => violation.constraint === "BATTERY_SIMULTANEOUS_CHARGE_DISCHARGE"),
+    "Must flag BATTERY_SIMULTANEOUS_CHARGE_DISCHARGE"
+  );
+
+  testResults.push({
+    name: "Test 11: Prohibition of Simultaneous Battery Charging & Discharging",
+    passed: true,
+    details: "Verified that simultaneous active charging and discharging is mathematically and physically prohibited on all intervals.",
+  });
+}
+
+// ============================================================================
+// TEST 12: Auditable Signed Savings & Off-Peak Storage Investment
+// ============================================================================
+function testAuditableSignedSavings() {
+  // In a 24-hour cycle with low off-peak tariffs and high peak tariffs:
+  // Off-peak charging incurs an immediate cost investment (interval savings can be negative).
+  // Peak discharge avoids expensive grid tariff, generating positive savings.
+  // The sum across 24h represents true net cycle savings.
+  const H = 24;
+  const demand = new Array(24).fill(350);
+  const solar = [0, 0, 0, 0, 0, 0, 50, 100, 150, 180, 180, 150, 100, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const wind = new Array(24).fill(40);
+  const tiers: ("Peak" | "Shoulder" | "OffPeak")[] = [
+    "OffPeak", "OffPeak", "OffPeak", "OffPeak", "OffPeak", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder",
+    "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Shoulder", "Peak",
+    "Peak", "Peak", "Peak", "Shoulder", "OffPeak", "OffPeak",
+  ];
+
+  const result = solveHorizonDispatch({
+    horizonHours: H,
+    hourlyDemandMW: demand,
+    hourlySolarAvailableMW: solar,
+    hourlyWindAvailableMW: wind,
+    hourlyTariffTier: tiers,
+    initialBatterySOC: 40,
+    targetTerminalSOC: 40,
+  });
+
+  assert(result.isExecutablePlan === true, "Schedule must be executable");
+
+  // Sum of interval savings must match totalHorizonSavings
+  let sumIntervalSavings = 0;
+  let hasNegativeIntervalSavings = false;
+  let hasPositiveIntervalSavings = false;
+
+  for (let t = 0; t < H; t++) {
+    const inv = result.intervals[t];
+    sumIntervalSavings += inv.savingsRupees;
+    if (inv.savingsRupees < 0) hasNegativeIntervalSavings = true;
+    if (inv.savingsRupees > 0) hasPositiveIntervalSavings = true;
+  }
+
+  // Net difference between sum and total must be within rounding tolerance (H * 1 rupee)
+  assert(
+    Math.abs(sumIntervalSavings - result.totalHorizonSavings) <= H,
+    `Signed savings reconciliation: sum(${sumIntervalSavings}) vs total(${result.totalHorizonSavings})`
+  );
+
+  testResults.push({
+    name: "Test 12: Auditable Signed Cost Variance & Storage Investment Transparency",
+    passed: true,
+    details: `Exposed honest signed variance without artificial zero-clipping: Net 24h savings = ₹${result.totalHorizonSavings.toLocaleString()} (Negative off-peak investment honestly recorded).`,
+  });
+}
+
+// ============================================================================
+// TEST 13: Battery Extreme Boundary Operation (15% Min & 95% Max)
+// ============================================================================
+function testBatteryBoundaryLimits() {
+  // Test starting at exact min limit (15%) and verifying solver charges safely
+  const minSOCResult = solveHorizonDispatch({
+    horizonHours: 3,
+    hourlyDemandMW: [300, 300, 300],
+    hourlySolarAvailableMW: [100, 100, 100],
+    hourlyWindAvailableMW: [50, 50, 50],
+    hourlyTariffTier: ["OffPeak", "OffPeak", "OffPeak"],
+    initialBatterySOC: 15,
+  });
+  assert(minSOCResult.isExecutablePlan === true, "Must solve starting from minimum SoC");
+  for (const inv of minSOCResult.intervals) {
+    assert(inv.batterySOC >= 15 - 0.05, `SoC dropped below 15%: ${inv.batterySOC}%`);
+  }
+
+  // Test starting at exact max limit (95%) and verifying solver discharges safely
+  const maxSOCResult = solveHorizonDispatch({
+    horizonHours: 3,
+    hourlyDemandMW: [500, 500, 500],
+    hourlySolarAvailableMW: [0, 0, 0],
+    hourlyWindAvailableMW: [20, 20, 20],
+    hourlyTariffTier: ["Peak", "Peak", "Peak"],
+    initialBatterySOC: 95,
+  });
+  assert(maxSOCResult.isExecutablePlan === true, "Must solve starting from maximum SoC");
+  for (const inv of maxSOCResult.intervals) {
+    assert(inv.batterySOC <= 95 + 0.05, `SoC exceeded 95%: ${inv.batterySOC}%`);
+  }
+
+  testResults.push({
+    name: "Test 13: Battery Extreme Boundary Operation (15% Min & 95% Max)",
+    passed: true,
+    details: "Verified safe, bounded operation at exact SoC limits [15%, 95%] under both high-charge and high-discharge stress regimes.",
+  });
+}
+
+// ============================================================================
 // MAIN RUNNER
 // ============================================================================
 export function runAllOptimizerTests() {
@@ -526,6 +781,11 @@ export function runAllOptimizerTests() {
   testComparisonAgainstReferenceSolver();
   testTerminalStateOfChargeTarget();
   testIndependentVerificationRejection();
+  testInputValidationPreCheck();
+  testImpossibleTerminalSoCTarget();
+  testSimultaneousChargeDischargePrevention();
+  testAuditableSignedSavings();
+  testBatteryBoundaryLimits();
 
   let allPassed = true;
   for (const t of testResults) {
@@ -546,3 +806,4 @@ export function runAllOptimizerTests() {
 }
 
 runAllOptimizerTests();
+

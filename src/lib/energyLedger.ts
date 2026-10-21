@@ -4,7 +4,30 @@
  * Generates and verifies interval-level historical energy accounting records
  * with cryptographic block chaining (SHA-256), dynamic shift/day/week/month aggregation,
  * and ISO 50001 audit export capabilities.
+ * 
+ * OPERATIONAL & PROVENANCE NOTICE:
+ * 1. IN-MEMORY AUDIT DEMONSTRATION: The SHA-256 blockchain implementation provides mathematical
+ *    tamper-evidence for historical interval records held in memory. However, in this web application
+ *    demonstration, records are generated from synthetic simulation data and held in client/runtime memory.
+ * 2. ENTERPRISE DURABLE AUDIT REQUIREMENTS: Live industrial ISO 50001 compliance requires:
+ *    - Durable append-only storage (e.g. cloud PostgreSQL ledger tables or immutable audit databases).
+ *    - Cryptographic signing keys secured in Hardware Security Modules (HSM) or cloud KMS.
+ *    - Authenticated field telemetry ingress with TLS mutual authentication from revenue-grade meters.
+ *    - Strict separation between automated telemetry recording and manual engineering overrides.
  */
+
+export const LEDGER_AUDIT_PROVENANCE_AND_LIMITATIONS = {
+  ledgerType: "IN_MEMORY_CRYPTOGRAPHIC_CHAIN_DEMO" as const,
+  isDurablePersistentStorage: false as const,
+  sourceTelemetryType: "SIMULATED_DIGITAL_TWIN" as const,
+  cryptographicPrimitive: "SHA-256 Block Chaining",
+  enterprisePrerequisites: [
+    "Migration to durable append-only relational ledger (PostgreSQL / AWS QLDB / Azure Immutable Blob)",
+    "FIPS 140-2 Level 3 HSM key management for block signer certificates",
+    "Mutual TLS (mTLS) authenticated ingest from substation RTUs / SCADA gateways",
+    "Independent external third-party auditor verification protocol",
+  ],
+};
 
 export interface EnergyLedgerRecord {
   blockIndex: number;
