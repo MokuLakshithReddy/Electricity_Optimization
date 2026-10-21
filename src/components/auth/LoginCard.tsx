@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { User, ShieldCheck, AlertCircle } from "lucide-react";
-import { authService, UserRole, AVAILABLE_ROLES } from "@/lib/authService";
+import { User, ShieldCheck, AlertCircle, KeyRound, Check } from "lucide-react";
+import { authService } from "@/lib/authService";
 import { InputField } from "./InputField";
 import { PasswordField } from "./PasswordField";
 import { RememberMe } from "./RememberMe";
@@ -12,10 +12,31 @@ interface LoginCardProps {
   className?: string;
 }
 
+// Certified enterprise demo accounts configured on the server
+const DEMO_ACCOUNTS = [
+  {
+    label: "R. Kulkarni (Energy Manager)",
+    username: "r.kulkarni",
+    pass: "SteelGrid#2026!Secure",
+    role: "Energy Manager",
+  },
+  {
+    label: "P. Sharma (Operations Engineer)",
+    username: "p.sharma",
+    pass: "ControlOps#2026!Grid",
+    role: "Operations Engineer",
+  },
+  {
+    label: "Security Admin (Full Audit/Root)",
+    username: "admin",
+    pass: "PlantAdmin#2026!Root",
+    role: "Administrator",
+  },
+];
+
 export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
-  const [username, setUsername] = useState("r.kulkarni");
-  const [password, setPassword] = useState("IntelliGrid@2026");
-  const [selectedRole, setSelectedRole] = useState<UserRole>("Energy Manager");
+  const [username, setUsername] = useState(DEMO_ACCOUNTS[0].username);
+  const [password, setPassword] = useState(DEMO_ACCOUNTS[0].pass);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -28,17 +49,21 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
     try {
       const res = await authService.login(username, password);
       if (res.success && res.user) {
-        // Set active role choice
-        authService.setRole(selectedRole);
         onSuccess();
       } else {
-        setErrorMsg(res.error || "Invalid username or password.");
+        setErrorMsg(res.error || "Invalid username or passphrase.");
       }
     } catch {
       setErrorMsg("Authentication service unavailable. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectAccount = (acc: typeof DEMO_ACCOUNTS[0]) => {
+    setUsername(acc.username);
+    setPassword(acc.pass);
+    setErrorMsg(null);
   };
 
   const handleForgotPassword = () => {
@@ -58,8 +83,39 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
           Control centre sign in
         </h2>
         <p className="text-sm text-slate-500 font-normal">
-          Authorised plant operations personnel only.
+          Server-verified authentication for authorized plant personnel.
         </p>
+      </div>
+
+      {/* Authorized Account Presets */}
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
+          Select Authorized Personnel Profile
+        </label>
+        <div className="space-y-1.5">
+          {DEMO_ACCOUNTS.map((acc) => {
+            const isSelected = username === acc.username;
+            return (
+              <button
+                type="button"
+                key={acc.username}
+                onClick={() => handleSelectAccount(acc)}
+                className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between border transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-[#159A72]/10 border-[#159A72] text-[#0F6B53] font-semibold"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span>{acc.label}</span>
+                {isSelected ? (
+                  <Check className="w-3.5 h-3.5 text-[#159A72]" />
+                ) : (
+                  <KeyRound className="w-3 h-3 text-slate-400" />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Inline Error Alert */}
@@ -67,7 +123,7 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
         <motion.div
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2.5 font-medium"
+          className="mt-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2.5 font-medium"
         >
           <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
           <span>{errorMsg}</span>
@@ -75,7 +131,7 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
       )}
 
       {/* Login Form */}
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4">
         {/* Username */}
         <InputField
           label="Username"
@@ -89,32 +145,13 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
 
         {/* Password */}
         <PasswordField
-          label="Password"
+          label="Passphrase"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••••••"
           autoComplete="current-password"
           required
         />
-
-        {/* Role Selector (Demo / Operational Context) */}
-        <div className="space-y-1.5 text-left">
-          <label htmlFor="role-select" className="block text-xs font-semibold text-slate-700">
-            Operating Role
-          </label>
-          <select
-            id="role-select"
-            value={selectedRole}
-            onChange={(e) => setSelectedRole(e.target.value as UserRole)}
-            className="w-full h-11 bg-slate-50 text-slate-800 text-xs font-medium rounded-xl border border-slate-300 px-3.5 focus:outline-none focus:border-[#159A72] focus:ring-2 focus:ring-[#159A72]/20 transition-all"
-          >
-            {AVAILABLE_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
-            ))}
-          </select>
-        </div>
 
         {/* Remember me & Forgot password */}
         <div className="pt-1">
@@ -132,9 +169,9 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
       </form>
 
       {/* Security Context Footer */}
-      <div className="mt-7 pt-5 border-t border-slate-100 flex items-center justify-center gap-2 text-[11px] font-medium text-slate-500">
+      <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-[11px] font-medium text-slate-500">
         <ShieldCheck className="w-3.5 h-3.5 text-[#159A72]" />
-        <span>Secured by plant SSO · Session logged for audit</span>
+        <span>Server HMAC-SHA256 tokens · Salted PBKDF2 hashes</span>
       </div>
     </motion.div>
   );

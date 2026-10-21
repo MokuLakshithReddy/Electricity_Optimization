@@ -120,7 +120,7 @@ function ForecastsPage() {
             Forecasting Engine
           </h1>
           <p className="text-xs sm:text-sm text-[#6B7280]">
-            Empirical ARX load model · Holdout Tested MAPE {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% over trailing 120h test set
+            Empirical ARX load model · Holdout Tested MAPE {MODEL_GOVERNANCE_CARD.holdoutEvaluation.mape}% over trailing 120h synthetic test set
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -131,10 +131,19 @@ function ForecastsPage() {
             <FileCheck className="h-3.5 w-3.5 text-[#1B4D3E]" />
             <span>Model Card & Evaluation</span>
           </button>
-          <div className="inline-flex items-center gap-2 rounded-full bg-[#E8F5E9] px-3.5 py-1.5 text-xs font-bold text-[#1B4D3E] border border-emerald-200 w-fit">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Model v4.2 · Holdout Verified</span>
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3.5 py-1.5 text-xs font-bold text-amber-900 border border-amber-200 w-fit">
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+            <span>Benchmark Protocol · Pre-Commissioning</span>
           </div>
+        </div>
+      </div>
+
+      {/* Benchmark Disclaimer Banner */}
+      <div className="rounded-2xl bg-amber-50/80 border border-amber-200/90 p-3.5 flex items-start gap-3">
+        <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-900 leading-relaxed">
+          <strong className="font-semibold">Synthetic Benchmark Protocol:</strong>{" "}
+          The evaluation metrics (2.38% MAPE over 120h holdout) demonstrate algorithmic convergence and benchmark superiority (vs 24h persistence and 7-day seasonal MA) on a standardized synthetic diurnal steel-mill dataset. These results do not claim commissioned plant accuracy on live factory SCADA. Production field deployment requires continuous on-site ingestion of historical plant telemetry.
         </div>
       </div>
 

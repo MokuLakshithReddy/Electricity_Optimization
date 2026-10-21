@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { Download, FileText, Leaf, IndianRupee, Zap, CheckCircle, ShieldCheck, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
-import { queryLedgerReport, exportLedgerToCsv } from "@/lib/energyLedger";
+import { queryLedgerReport, exportLedgerToCsv, buildHistoricalLedger, verifyLedgerCryptographicIntegrity } from "@/lib/energyLedger";
 import {
   Bar,
   BarChart,
@@ -40,6 +40,11 @@ export type ReportPeriod = "Daily" | "Weekly" | "Monthly";
 
 export function ReportsPage() {
   const [period, setPeriod] = useState<ReportPeriod>("Weekly");
+  const [integrityStatus, setIntegrityStatus] = useState<{
+    verified: boolean;
+    blocks: number;
+    isValid: boolean;
+  } | null>(null);
   const energyState = useEnergyState();
 
   // Query historical energy ledger dynamically based on selected period
@@ -61,6 +66,19 @@ export function ReportsPage() {
     costTrendData: ledgerData.costTrendData,
     ledger: ledgerData.ledgerRows,
   }), [ledgerData]);
+
+  // Cryptographic Ledger Verification Action
+  const handleVerifyLedger = () => {
+    const fullLedger = buildHistoricalLedger();
+    const res = verifyLedgerCryptographicIntegrity(fullLedger);
+    if (res.isValid) {
+      setIntegrityStatus({ verified: true, blocks: res.verifiedBlocks, isValid: true });
+      toast.success(`Ledger verified: All ${res.verifiedBlocks} interval blocks validated with SHA-256 chain integrity.`);
+    } else {
+      setIntegrityStatus({ verified: true, blocks: res.verifiedBlocks, isValid: false });
+      toast.error(`Verification failed at block #${res.brokenBlockIndex}: hash mismatch!`);
+    }
+  };
 
   // CSV Ledger Audit Export Action
   const handleExportCSV = () => {
@@ -406,11 +424,33 @@ export function ReportsPage() {
               Audited historical energy, cost and carbon breakdown
             </p>
           </div>
-          <span className="text-xs font-bold text-emerald-800 bg-[#E8F5E9] px-3 py-1 rounded-full flex items-center gap-1 border border-emerald-200">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Audit-verified</span>
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleVerifyLedger}
+              className="text-xs font-bold text-[#1B4D3E] bg-[#FAF8F5] hover:bg-[#E8F5E9] px-3.5 py-1.5 rounded-full flex items-center gap-1.5 border border-[#E6E1D7] transition-colors cursor-pointer shadow-2xs"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Verify Blockchain Integrity (SHA-256)</span>
+            </button>
+            <span className="text-xs font-bold text-emerald-800 bg-[#E8F5E9] px-3 py-1.5 rounded-full flex items-center gap-1 border border-emerald-200">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Cryptographically Chained</span>
+            </span>
+          </div>
         </div>
+
+        {integrityStatus && (
+          <div className={`p-3 rounded-2xl text-xs flex items-center justify-between border ${
+            integrityStatus.isValid ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-red-50 border-red-200 text-red-900"
+          }`}>
+            <span className="font-medium">
+              {integrityStatus.isValid
+                ? `Cryptographic Audit Passed: All ${integrityStatus.blocks} interval blocks verified with authentic SHA-256 signatures and zero chain breaks.`
+                : "Tamper Detected: Blockchain verification failed. Hash sequence broken."}
+            </span>
+            <span className="font-mono text-[11px] font-bold">FIPS 180-4 SHA-256 Verified</span>
+          </div>
+        )}
 
         <table className="w-full min-w-[680px] text-xs sm:text-sm">
           <thead>

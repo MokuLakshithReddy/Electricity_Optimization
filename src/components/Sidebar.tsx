@@ -120,19 +120,31 @@ export function Sidebar({ onOpenWhatIf }: SidebarProps) {
         </div>
 
         {/* User / Plant Info Card at Bottom */}
-        <div className="flex items-center gap-3 rounded-2xl border border-[#E6E1D7] bg-white p-3 shadow-xs">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#1B4D3E]/10 text-[#1B4D3E] font-bold text-xs">
-            {currentUser.name
-              ? currentUser.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-              : "EM"}
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-[#E6E1D7] bg-white p-3 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#1B4D3E]/10 text-[#1B4D3E] font-bold text-xs">
+              {currentUser?.name
+                ? currentUser.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                : "OP"}
+            </div>
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="text-xs font-bold text-[#1F2937] truncate">{currentUser?.role || "Operator"}</p>
+              <p className="text-[10px] text-[#6B7280] truncate">{currentUser?.name || "Shift Operations"}</p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1 leading-tight">
-            <p className="text-xs font-bold text-[#1F2937] truncate">{currentUser.role}</p>
-            <p className="text-[11px] text-[#6B7280] truncate">{currentUser.name}</p>
-          </div>
+          <button
+            onClick={() => {
+              authService.logout();
+              window.location.href = "/";
+            }}
+            title="Sign out of control centre"
+            className="text-[10px] text-[#9CA3AF] hover:text-red-600 font-semibold px-1.5 py-1 rounded-md hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+          >
+            Sign out
+          </button>
         </div>
       </div>
     </aside>

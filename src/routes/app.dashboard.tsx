@@ -93,16 +93,16 @@ function DashboardContent() {
       {/* Live SCADA Telemetry & Industrial Interlock Banner */}
       <div className="bg-[#1B4D3E]/5 border border-[#1B4D3E]/20 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <div className="h-3 w-3 rounded-full bg-amber-500 animate-pulse shrink-0" />
           <div>
             <div className="text-xs font-semibold text-[#1B4D3E] uppercase tracking-wider flex items-center gap-2">
-              <span>Industrial SCADA Telemetry & Equipment Safety Interlocks</span>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-mono">
-                Modbus/OPC-UA Live
+              <span>Industrial Telemetry & Safety Interlocks (Digital Twin Model)</span>
+              <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                Simulation Sandbox · PLC Actuation Locked
               </span>
             </div>
             <div className="text-xs text-[#6B7280]">
-              5 Factory Submeter Registers • Inverter Frequency 50.02 Hz • BESS Thermal Safe • Watchdog: Heartbeat Normal
+              5 Synthetic Submeter Registers • Virtual Inverter 50.02 Hz • Software Watchdog Heartbeat Active
             </div>
           </div>
         </div>
@@ -111,7 +111,7 @@ function DashboardContent() {
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#1B4D3E] hover:bg-[#153e32] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
         >
           <Activity className="h-3.5 w-3.5" />
-          Open SCADA & Dispatch Console
+          Open Digital Twin SCADA
         </button>
       </div>
 

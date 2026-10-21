@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Outlet, useRouterState } from "@tanstack/react-router";
+import { Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Bell, Menu } from "lucide-react";
+import { Search, Bell, Menu, ShieldAlert } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { FloatingAIAssistant } from "@/components/FloatingAIAssistant";
 import { WhatIfSimulatorModal } from "@/components/WhatIfSimulatorModal";
 import { EnergyProvider } from "@/context/EnergyContext";
+import { authService } from "@/lib/authService";
 import { alerts } from "@/lib/energy";
 
 function Clock() {
@@ -35,12 +36,44 @@ export function AppShell() {
 }
 
 function AppShellContent() {
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [isAuthed, setIsAuthed] = useState<boolean>(true);
 
-  useEffect(() => setMobileMenuOpen(false), [pathname]);
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    // Enforce authentication gate: No unauthenticated access to control room
+    if (typeof window !== "undefined") {
+      const authed = authService.isAuthenticated();
+      setIsAuthed(authed);
+      if (!authed) {
+        navigate({ to: "/" });
+      }
+    }
+  }, [pathname, navigate]);
+
+  if (!isAuthed) {
+    return (
+      <div className="min-h-screen bg-[#031019] flex items-center justify-center p-6 text-white text-center">
+        <div className="max-w-md bg-[#081C28] border border-red-500/30 p-8 rounded-3xl space-y-4">
+          <ShieldAlert className="w-12 h-12 text-red-500 mx-auto" />
+          <h2 className="text-xl font-bold">Plant Access Control Required</h2>
+          <p className="text-xs text-slate-400">
+            No active server-verified session detected. You are being redirected to the control centre sign-in.
+          </p>
+          <button
+            onClick={() => navigate({ to: "/" })}
+            className="px-5 py-2.5 bg-[#159A72] text-white rounded-xl text-xs font-semibold"
+          >
+            Go to Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[#FAF8F5] text-[#1F2937]">

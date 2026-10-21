@@ -54,17 +54,53 @@ export interface AggregatedReport {
   }[];
 }
 
+import { sha256 } from "./cryptoUtils";
+
 /**
- * Deterministic pseudo-random number generator for reproducible ledger history.
+ * Verifies the cryptographic integrity of the entire energy ledger blockchain.
+ * Recomputes SHA-256 hashes for all blocks and verifies previous-block links.
  */
-function pseudoHash(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
+export function verifyLedgerCryptographicIntegrity(records: EnergyLedgerRecord[]): {
+  isValid: boolean;
+  verifiedBlocks: number;
+  brokenBlockIndex?: number;
+  expectedHash?: string;
+  actualHash?: string;
+} {
+  let expectedPrev = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
+
+  for (let i = 0; i < records.length; i++) {
+    const rec = records[i];
+
+    // Check link to previous block
+    if (rec.previousBlockHash !== expectedPrev) {
+      return {
+        isValid: false,
+        verifiedBlocks: i,
+        brokenBlockIndex: i,
+        expectedHash: expectedPrev,
+        actualHash: rec.previousBlockHash,
+      };
+    }
+
+    // Recompute block hash
+    const blockData = `${rec.blockIndex}|${rec.timestamp}|${rec.demandMWh}|${rec.solarMWh}|${rec.windMWh}|${rec.bessDischargeMWh}|${rec.bessChargeMWh}|${rec.gridImportMWh}|${rec.captiveMWh}|${rec.dieselMWh}|${rec.optimizedCostRupees}|${rec.verifiedSavingsRupees}|${rec.previousBlockHash}`;
+    const computedHash = sha256(blockData);
+
+    if (computedHash !== rec.blockHashSha256) {
+      return {
+        isValid: false,
+        verifiedBlocks: i,
+        brokenBlockIndex: i,
+        expectedHash: computedHash,
+        actualHash: rec.blockHashSha256,
+      };
+    }
+
+    expectedPrev = rec.blockHashSha256;
   }
-  return Math.abs(hash).toString(16).padStart(8, "0") + "a9e4b7c12f";
+
+  return { isValid: true, verifiedBlocks: records.length };
 }
 
 /**
@@ -143,8 +179,9 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
     const renewablePct = Number((((solarMWh + windMWh) / demandMWh) * 100).toFixed(1));
     const reliabilityPct = dieselMWh > 20 ? 99.85 : 99.97;
 
-    const blockData = `${i}|${time.toISOString()}|${demandMWh}|${optCost}|${savings}|${prevHash}`;
-    const blockHashSha256 = pseudoHash(blockData);
+    const blockData = `${i}|${time.toISOString()}|${demandMWh}|${solarMWh}|${windMWh}|${bessDischargeMWh}|${bessChargeMWh}|${gridImportMWh}|${captiveMWh}|${dieselMWh}|${Math.round(optCost)}|${Math.round(savings)}|${prevHash}`;
+    const blockHashSha256 = sha256(blockData);
+    const thisBlockPrevHash = prevHash;
     prevHash = blockHashSha256;
 
     records.push({
@@ -167,7 +204,7 @@ export function buildHistoricalLedger(): EnergyLedgerRecord[] {
       co2AvoidedTonnes: Number(co2Avoided.toFixed(1)),
       renewablePct,
       reliabilityPct,
-      previousBlockHash: prevHash,
+      previousBlockHash: thisBlockPrevHash,
       blockHashSha256,
     });
   }

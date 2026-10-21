@@ -57,6 +57,8 @@ export interface ModelGovernanceCard {
   residualQuantiles: { p10: number; p25: number; p50: number; p75: number; p90: number; p95: number };
   lastTrainedAt: string;
   trainingStatus: "VERIFIED_CONVERGED";
+  evaluationProtocol: string;
+  benchmarkDisclaimer: string;
 }
 
 /**
@@ -341,4 +343,7 @@ export const MODEL_GOVERNANCE_CARD: ModelGovernanceCard = {
   },
   lastTrainedAt: "2026-10-16T04:12:00Z",
   trainingStatus: "VERIFIED_CONVERGED",
+  evaluationProtocol: "Standardized Synthetic Diurnal Industrial Benchmark (720h Chronological Split)",
+  benchmarkDisclaimer:
+    "Offline algorithmic benchmark evaluated on synthetic steel-mill diurnal load profiles. Proves mathematical convergence and baseline improvements (vs 24h persistence and 7-day seasonal MA). Production commissioning requires on-site historical SCADA data ingestion and retraining.",
 };
