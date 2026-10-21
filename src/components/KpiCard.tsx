@@ -135,7 +135,8 @@ export function KpiCard({ data }: KpiCardProps) {
               cx={width}
               cy={
                 height -
-                ((data.sparkline[data.sparkline.length - 1] - min) / range) * (height - 8) -
+                (((data.sparkline[data.sparkline.length - 1] ?? min) - min) / range) *
+                  (height - 8) -
                 4
               }
               r="3.5"

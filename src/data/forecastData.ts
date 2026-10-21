@@ -279,8 +279,8 @@ export function generateForecast(
       const actualVal = isPast ? Math.round(predictedVal - 10 + i * 5) : null;
 
       points.push({
-        t: labels[i],
-        timestamp: labels[i],
+        t: labels[i] ?? "",
+        timestamp: labels[i] ?? "",
         actual: actualVal,
         predicted: predictedVal,
         upper: predictedVal + uncertainty,
@@ -306,15 +306,15 @@ export function generateForecast(
 
     for (let i = 0; i < hours.length; i++) {
       const isPast = i <= 3;
-      const stepHour = hourMap[i] % 24;
+      const stepHour = (hourMap[i] ?? 0) % 24;
       const modelPred = predictLoadMW(recentHistory, stepHour, currentDay, 30);
       const predictedVal = Math.round(baseDemand * 0.4 + modelPred * 0.6);
       const uncertainty = Math.round(baseResidualStd * 1.1 + Math.sin(i) * 6);
       const actualVal = isPast ? predictedVal : null;
 
       points.push({
-        t: hours[i],
-        timestamp: hours[i],
+        t: hours[i] ?? "",
+        timestamp: hours[i] ?? "",
         actual: actualVal,
         predicted: predictedVal,
         upper: predictedVal + uncertainty,
@@ -327,7 +327,7 @@ export function generateForecast(
   // Summary Metrics
   const predictedPeak = Math.max(...points.map((p) => p.predicted));
   const peakPoint = points.find((p) => p.predicted === predictedPeak) || points[points.length - 1];
-  const peakTime = peakPoint.t === "Now" ? "Current" : peakPoint.t;
+  const peakTime = peakPoint?.t === "Now" ? "Current" : (peakPoint?.t ?? "Peak");
 
   const avgUncertainty = Math.round(
     points.reduce((acc, p) => acc + (p.upper - p.predicted), 0) / points.length,
@@ -335,8 +335,12 @@ export function generateForecast(
 
   let maxRamp = 0;
   for (let i = 1; i < points.length; i++) {
-    const diff = Math.abs(points[i].predicted - points[i - 1].predicted);
-    if (diff > maxRamp) maxRamp = diff;
+    const pCur = points[i];
+    const pPrev = points[i - 1];
+    if (pCur && pPrev) {
+      const diff = Math.abs(pCur.predicted - pPrev.predicted);
+      if (diff > maxRamp) maxRamp = diff;
+    }
   }
   const scaledMaxRamp = Math.round(maxRamp * (horizon === "15m" ? 4 : horizon === "1h" ? 2 : 1.2));
 

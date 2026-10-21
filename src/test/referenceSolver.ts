@@ -504,16 +504,17 @@ function solveContinuousHorizonLP(
 }
 
 /**
- * Independent Reference Solver: Bellman Dynamic Programming (DP-UCED)
+ * Independent Reference Solver: Candidate Window Unit-Commitment Search
  *
- * Evaluates the multi-stage unit-commitment decision process using the Bellman
- * Principle of Optimality:
- * V(t, S_t) = min_{S_{t-1}} { V(t-1, S_{t-1}) + C_trans(S_{t-1}, S_t) + C_stage(t, S_t) }
+ * Explores structured candidate commitment schedules across operational windows
+ * (all-offline, all-online, single contiguous blocks [s, e], and dual peak windows).
  *
- * This formulation is completely independent of Branch-and-Bound and LP relaxation
- * bounds, using sequential stage transitions and state-space recurrence.
+ * Note on Formulation:
+ * This solver evaluates structured candidate commitment windows and serves as an
+ * independent heuristic benchmark. It is NOT a full Bellman state-space recurrence
+ * over continuous battery SoC / generator ramping state spaces.
  */
-export function solveIndependentBellmanDPSolver(input: HorizonDispatchInput): ReferenceMILPResult {
+export function solveIndependentCandidateSearch(input: HorizonDispatchInput): ReferenceMILPResult {
   const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
   const H = input.horizonHours;
   const initialGenCommitted = input.initialGeneratorCommitted ?? false;
@@ -638,18 +639,23 @@ export function solveIndependentBellmanDPSolver(input: HorizonDispatchInput): Re
   );
 }
 
+export const solveIndependentBellmanDPSolver = solveIndependentCandidateSearch;
+
 /**
  * Independent Exhaustive Benchmark Solver:
- * Brute-force evaluates all 2^K binary combinations of generator commitment
- * for exact benchmark testing against Branch-and-Bound and Dynamic Programming.
+ * Brute-force evaluates ALL 2^H binary combinations of generator commitment
+ * for exact benchmark testing against Branch-and-Bound.
+ *
+ * For H <= maxExhaustiveHorizon (default 12), evaluates the complete 2^H combinatorial
+ * state space without any heuristic pruning (e.g. 2^6 = 64, 2^8 = 256, 2^10 = 1024, 2^12 = 4096).
  */
 export function solveExhaustiveReferenceMILP(
   input: HorizonDispatchInput,
-  windowSize: number = Math.min(input.horizonHours, 10),
+  maxExhaustiveHorizon: number = 12,
 ): ReferenceMILPResult {
   const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
   const H = input.horizonHours;
-  const K = Math.min(H, windowSize);
+  const K = Math.min(H, maxExhaustiveHorizon);
   const totalCombos = 1 << K;
 
   let bestCost = Infinity;
@@ -686,10 +692,44 @@ export function solveExhaustiveReferenceMILP(
 }
 
 /**
- * Full Multi-Period Reference Benchmark Entry Point (Bellman DP + Simplex)
+ * Independent Continuous Relaxation Dual Lower Bound for 24-Hour Horizon:
+ * Relaxes the discrete commitment binary constraints to 0 <= u_t <= 1,
+ * solving the continuous relaxation via independent primal simplex.
+ *
+ * By linear programming duality, this establishes a mathematically unassailable
+ * lower bound Z_LB <= Z_MILP* for any feasible mixed-integer schedule over the 24-hour horizon.
+ */
+export function solveContinuousRelaxationLowerBound(input: HorizonDispatchInput): {
+  status: "OPTIMAL" | "INFEASIBLE";
+  lowerBoundCost: number;
+} {
+  const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
+  const H = input.horizonHours;
+
+  // Fully relaxed continuous generator operation: [0, generatorMaxMW] without discrete startup jump
+  const relaxedU = new Array(H).fill(true);
+  const relaxedConstraints: AssetConstraints = {
+    ...c,
+    generatorMinMW: 0,
+    generatorStartupCost: 0,
+  };
+
+  const lpRes = solveContinuousHorizonLP(relaxedU, input, relaxedConstraints);
+  if (lpRes.sol.status !== "OPTIMAL") {
+    return { status: "INFEASIBLE", lowerBoundCost: 0 };
+  }
+
+  return {
+    status: "OPTIMAL",
+    lowerBoundCost: Math.round(lpRes.trueTotalCost),
+  };
+}
+
+/**
+ * Full Multi-Period Reference Benchmark Entry Point
  */
 export function solveReferenceHorizonMILP(input: HorizonDispatchInput): ReferenceMILPResult {
-  return solveIndependentBellmanDPSolver(input);
+  return solveIndependentCandidateSearch(input);
 }
 
 function buildResult(

@@ -141,7 +141,7 @@ export function runDigitalTwinSimulation(inputs: SimulatorInputs): PhysicalSimul
   const hourlySchedule: HourlyDispatchStep[] = [];
 
   for (let h = 0; h < 24; h++) {
-    const demand = Number((base24hDemand[h] * demandScaleFactor).toFixed(1));
+    const demand = Number(((base24hDemand[h] ?? 0) * demandScaleFactor).toFixed(1));
     totalDailyDemandMWh += demand;
 
     // Time-of-Day Tariff Schedule
@@ -158,8 +158,8 @@ export function runDigitalTwinSimulation(inputs: SimulatorInputs): PhysicalSimul
     }
 
     // Renewable generation available
-    const solarAvail = Number((solarProfile[h] * totalSolarCapMW).toFixed(1));
-    const windAvail = Number(windProfileMW[h].toFixed(1));
+    const solarAvail = Number(((solarProfile[h] ?? 0) * totalSolarCapMW).toFixed(1));
+    const windAvail = Number((windProfileMW[h] ?? 0).toFixed(1));
 
     // Usable energy in battery
     const usableEnergyMWh = (totalBatteryCapMWh * Math.max(0, currentSOC - minSOC)) / 100;
@@ -251,7 +251,7 @@ export function runDigitalTwinSimulation(inputs: SimulatorInputs): PhysicalSimul
       unserved * 50 * 1000; // Value of Lost Load penalty ₹50/kWh
 
     // Unoptimized Baseline cost for that hour
-    const baselineSolar = Math.min(demand * 0.4, 145 * solarProfile[h]);
+    const baselineSolar = Math.min(demand * 0.4, 145 * (solarProfile[h] ?? 0));
     const baselineCaptive = Math.min(captiveMinMW + 20, demand - baselineSolar);
     const baselineGrid = gridOutage ? 0 : Math.min(250, demand - baselineSolar - baselineCaptive);
     const baselineGen = Math.max(0, demand - baselineSolar - baselineCaptive - baselineGrid);

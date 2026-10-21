@@ -268,6 +268,7 @@ export function evaluateHoldoutTestSet(): {
   for (let idx = 0; idx < testSet.length; idx++) {
     const globalIdx = 600 + idx;
     const point = testSet[idx];
+    if (!point) continue;
     const actual = point.actualDemandMW;
 
     // Slices for autoregressive features
@@ -284,7 +285,7 @@ export function evaluateHoldoutTestSet(): {
     sumAbsErrModel += residual;
 
     // 2. Baseline 1: 24h Naive Persistence (y_t = y_{t-24})
-    const persistPred = HISTORICAL_TELEMETRY[globalIdx - 24].actualDemandMW;
+    const persistPred = HISTORICAL_TELEMETRY[globalIdx - 24]?.actualDemandMW ?? actual;
     sumAbsPctErrPersist += Math.abs((actual - persistPred) / actual);
     sumSqErrPersist += Math.pow(actual - persistPred, 2);
     sumAbsErrPersist += Math.abs(actual - persistPred);
@@ -533,8 +534,8 @@ export function evaluateForecastDrift(
 
   let totalPctError = 0;
   for (let i = 0; i < n; i++) {
-    const actual = actualTelemetryMW[i];
-    const pred = predictedP50MW[i];
+    const actual = actualTelemetryMW[i] ?? 0;
+    const pred = predictedP50MW[i] ?? 0;
     if (actual > 0) {
       totalPctError += (Math.abs(actual - pred) / actual) * 100;
     }

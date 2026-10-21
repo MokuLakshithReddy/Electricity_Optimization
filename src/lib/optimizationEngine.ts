@@ -49,6 +49,7 @@ export interface AssetConstraints {
   gridContractDemandMW: number; // Commercial billing contract limit (e.g. 250 MW)
   gridMaxImportMW: number; // Physical transmission line / substation capacity (e.g. 300 MW)
   gridDemandChargePenaltyPerMW: number; // ₹/MW penalty for exceeding contract limit
+  maxBnBNodes?: number; // Maximum Branch-and-Bound exploration nodes before stopping (default 150)
 }
 
 export const DEFAULT_CONSTRAINTS: AssetConstraints = {
@@ -76,6 +77,7 @@ export const DEFAULT_CONSTRAINTS: AssetConstraints = {
   gridContractDemandMW: 250,
   gridMaxImportMW: 300,
   gridDemandChargePenaltyPerMW: 15000,
+  maxBnBNodes: 150,
 };
 
 export interface HorizonDispatchInput {
@@ -117,19 +119,31 @@ export interface HorizonIntervalDispatch {
   marginalCostPerKWh: number;
 }
 
+export type OptimizationSolverStatus =
+  | "PROVEN_GLOBAL_OPTIMAL"
+  | "FEASIBLE_SUBOPTIMAL"
+  | "INFEASIBLE_DEFICIT"
+  | "LIMIT_EXCEEDED_INFEASIBLE"
+  | "NUMERICAL_FAILURE"
+  | "OPTIMAL_CONVERGED";
+
 export interface OptimalityProof {
   isMathematicallyProvenGlobal: boolean;
   proofMethod:
-    "BRANCH_AND_BOUND_MILP" | "CONVEX_RELAXATION_DOMINANCE" | "BELLMAN_DYNAMIC_PROGRAMMING";
+    | "BRANCH_AND_BOUND_MILP"
+    | "CONVEX_RELAXATION_DOMINANCE"
+    | "INCOMPLETE_SEARCH_BUDGET"
+    | "BELLMAN_DYNAMIC_PROGRAMMING";
   optimalityGapPct: number;
   exploredNodesCount: number;
+  openNodesRemaining: number;
   lowerBoundObjectiveRupees: number;
   incumbentObjectiveRupees: number;
   dualityProofStatement: string;
 }
 
 export interface HorizonOptimizationResult {
-  solverStatus: "OPTIMAL_CONVERGED" | "INFEASIBLE_DEFICIT";
+  solverStatus: OptimizationSolverStatus;
   isExecutablePlan: boolean;
   executionBlockedReason?: string | undefined;
   totalHorizonCost: number;
@@ -185,7 +199,7 @@ export interface DispatchSchedule {
 }
 
 export interface OptimizationResult {
-  solverStatus: "OPTIMAL_CONVERGED" | "INFEASIBLE_DEFICIT";
+  solverStatus: OptimizationSolverStatus;
   isExecutablePlan: boolean;
   executionBlockedReason?: string;
   dispatch: DispatchSchedule | null;
@@ -273,7 +287,8 @@ export function validateHorizonInputs(
   if (Array.isArray(input.hourlyDemandMW)) {
     for (let t = 0; t < input.hourlyDemandMW.length; t++) {
       const d = input.hourlyDemandMW[t];
-      if (!Number.isFinite(d)) errors.push(`H${t}: Non-finite demand value (${d}).`);
+      if (d === undefined || !Number.isFinite(d))
+        errors.push(`H${t}: Non-finite demand value (${d}).`);
       else if (d < 0)
         errors.push(`H${t}: Negative demand value (${d} MW). Power demand must be >= 0.`);
     }
@@ -282,14 +297,16 @@ export function validateHorizonInputs(
   if (Array.isArray(input.hourlySolarAvailableMW)) {
     for (let t = 0; t < input.hourlySolarAvailableMW.length; t++) {
       const s = input.hourlySolarAvailableMW[t];
-      if (!Number.isFinite(s) || s < 0) errors.push(`H${t}: Invalid solar availability (${s} MW).`);
+      if (s === undefined || !Number.isFinite(s) || s < 0)
+        errors.push(`H${t}: Invalid solar availability (${s} MW).`);
     }
   }
 
   if (Array.isArray(input.hourlyWindAvailableMW)) {
     for (let t = 0; t < input.hourlyWindAvailableMW.length; t++) {
       const w = input.hourlyWindAvailableMW[t];
-      if (!Number.isFinite(w) || w < 0) errors.push(`H${t}: Invalid wind availability (${w} MW).`);
+      if (w === undefined || !Number.isFinite(w) || w < 0)
+        errors.push(`H${t}: Invalid wind availability (${w} MW).`);
     }
   }
 
@@ -1449,17 +1466,23 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
   let bestTotalCostWithStartup = Infinity;
   let totalSimplexIterations = 0;
   let exploredNodesCount = 0;
+  let openNodesRemaining = 0;
+  const maxBnBNodes = c.maxBnBNodes ?? 150;
   let rootLowerBound = 0;
   let isProvenGlobal = false;
+  let rootRelaxationFeasible = false;
   let proofMethod:
-    "BRANCH_AND_BOUND_MILP" | "CONVEX_RELAXATION_DOMINANCE" | "BELLMAN_DYNAMIC_PROGRAMMING" =
-    "BRANCH_AND_BOUND_MILP";
+    | "BRANCH_AND_BOUND_MILP"
+    | "CONVEX_RELAXATION_DOMINANCE"
+    | "INCOMPLETE_SEARCH_BUDGET"
+    | "BELLMAN_DYNAMIC_PROGRAMMING" = "BRANCH_AND_BOUND_MILP";
 
   // Step 2a: Evaluate all-offline candidate u = [0, ..., 0] as baseline incumbent
   const allZeroCommitment = new Array(H).fill(false);
   const allZeroResult = buildAndSolveNodeLP(allZeroCommitment);
   totalSimplexIterations += allZeroResult.sol.iterations;
   if (allZeroResult.sol.status === "OPTIMAL") {
+    rootRelaxationFeasible = true;
     bestSolution = allZeroResult.sol;
     bestCommitment = allZeroCommitment;
     bestTotalCostWithStartup = allZeroResult.sol.objValue + allZeroResult.startupCostTotal;
@@ -1479,6 +1502,7 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       proofMethod = "CONVEX_RELAXATION_DOMINANCE";
       rootLowerBound = bestTotalCostWithStartup;
       exploredNodesCount = 1;
+      openNodesRemaining = 0;
     }
   }
 
@@ -1491,12 +1515,13 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     exploredNodesCount++;
 
     if (rootResult.sol.status === "OPTIMAL") {
+      rootRelaxationFeasible = true;
       rootLowerBound = rootResult.sol.objValue;
-      const rootOpenQueue: BnBNode[] = [
+      let rootOpenQueue: BnBNode[] = [
         { fixed: rootFixed, lowerBound: rootResult.sol.objValue, depth: 0 },
       ];
 
-      while (rootOpenQueue.length > 0 && exploredNodesCount < 120) {
+      while (rootOpenQueue.length > 0 && exploredNodesCount < maxBnBNodes) {
         // Best-bound selection: node with minimal lowerBound
         rootOpenQueue.sort((a, b) => a.lowerBound - b.lowerBound);
         const currentNode = rootOpenQueue.shift();
@@ -1504,6 +1529,8 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
 
         // Bound fathoming
         if (currentNode.lowerBound >= bestTotalCostWithStartup - 1e-4) {
+          // All remaining open nodes have lowerBound >= currentNode.lowerBound >= bestTotalCostWithStartup
+          rootOpenQueue = [];
           isProvenGlobal = true;
           break; // All remaining open nodes fathomed!
         }
@@ -1583,11 +1610,21 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
 
       if (rootOpenQueue.length === 0) {
         isProvenGlobal = true;
+        openNodesRemaining = 0;
+      } else {
+        isProvenGlobal = false;
+        openNodesRemaining = rootOpenQueue.length;
+        proofMethod = "INCOMPLETE_SEARCH_BUDGET";
+        const minOpenLowerBound = Math.min(...rootOpenQueue.map((n) => n.lowerBound));
+        rootLowerBound = Math.max(
+          rootLowerBound,
+          Math.min(minOpenLowerBound, bestTotalCostWithStartup),
+        );
       }
     }
   }
 
-  // Step 4: Handle Infeasible Physical Capacity Deficit
+  // Step 4: Handle Infeasible Physical Capacity Deficit or Search Limit Exceeded
   if (!bestSolution || bestSolution.status !== "OPTIMAL") {
     let unservedEnergyMWh = 0;
     const deficitIntervals: {
@@ -1618,15 +1655,23 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       }
     }
 
+    const isModelInfeasible =
+      !rootRelaxationFeasible || unservedEnergyMWh > 0 || deficitIntervals.length > 0;
+    const solverStatus: OptimizationSolverStatus = isModelInfeasible
+      ? "INFEASIBLE_DEFICIT"
+      : "LIMIT_EXCEEDED_INFEASIBLE";
+
     const deficitHours = deficitIntervals
       .map((d) => `H${d.hour} (${d.deficitMW} MW shortfall)`)
       .join(", ");
     return {
-      solverStatus: "INFEASIBLE_DEFICIT",
+      solverStatus,
       isExecutablePlan: false,
-      executionBlockedReason: `DISPATCH EXECUTION BLOCKED: Physical capacity deficit. Demand exceeds total maximum facility generation in [${
-        deficitHours || "terminal SoC recovery / ramping constraint window"
-      }]. Unserved energy of ${unservedEnergyMWh.toFixed(1)} MWh requires emergency load curtailment before dispatch authorization.`,
+      executionBlockedReason: isModelInfeasible
+        ? `DISPATCH EXECUTION BLOCKED: Physical capacity deficit or mathematical constraint infeasibility. Demand exceeds available generation or ramping/SoC constraints cannot be satisfied in [${
+            deficitHours || "terminal SoC recovery / ramping constraint window"
+          }]. Unserved energy of ${unservedEnergyMWh.toFixed(1)} MWh requires emergency load curtailment before dispatch authorization.`
+        : `DISPATCH EXECUTION BLOCKED: Exploration budget exhausted (${exploredNodesCount} nodes explored, limit ${maxBnBNodes}) without finding any integer-feasible schedule.`,
       totalHorizonCost: 0,
       totalHorizonBaselineCost: 0,
       totalHorizonSavings: 0,
@@ -1699,6 +1744,12 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     const genFuelCostMWh =
       (c.generatorFuelCostPerLitre / c.generatorSpecificFuelConsumption) * 1000;
 
+    let intervalStartupCost = 0;
+    const wasCommitted = t === 0 ? initialGenCommitted : (bestCommitment[t - 1] ?? false);
+    if (isCommitted && !wasCommitted) {
+      intervalStartupCost = c.generatorStartupCost;
+    }
+
     const intervalCost =
       dSolar * solarCostMWh +
       dWind * windCostMWh +
@@ -1707,7 +1758,8 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
       dGridContract * gridContractCostMWh +
       dGridExcess * gridExcessCostMWh +
       dCaptive * captiveCostMWh +
-      dGen * genFuelCostMWh;
+      dGen * genFuelCostMWh +
+      intervalStartupCost;
 
     // Feasible baseline calculation
     const base = calculateFeasibleOperatingBaseline(
@@ -1778,6 +1830,15 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     executionBlockedReason = `DISPATCH EXECUTION BLOCKED: Reconstructed schedule breached independent physical/contract limits: [${violationNotes}]. Equipment actuation locked out.`;
   }
 
+  let solverStatus: OptimizationSolverStatus;
+  if (!isExecutablePlan) {
+    solverStatus = "NUMERICAL_FAILURE";
+  } else if (isProvenGlobal) {
+    solverStatus = "PROVEN_GLOBAL_OPTIMAL";
+  } else {
+    solverStatus = "FEASIBLE_SUBOPTIMAL";
+  }
+
   const gapPct =
     bestSolution && Number.isFinite(bestTotalCostWithStartup) && rootLowerBound > 0
       ? Number(
@@ -1793,15 +1854,16 @@ export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimi
     proofMethod,
     optimalityGapPct: gapPct,
     exploredNodesCount,
+    openNodesRemaining,
     lowerBoundObjectiveRupees: Math.round(rootLowerBound),
     incumbentObjectiveRupees: Math.round(bestTotalCostWithStartup),
     dualityProofStatement: isProvenGlobal
       ? `Global optimality mathematically proven via ${proofMethod}. Optimality gap: ${gapPct}%. Explored ${exploredNodesCount} nodes with dual LP relaxation bounding.`
-      : `Branch-and-bound feasible incumbent found. Optimality gap: ${gapPct}%. Explored ${exploredNodesCount} nodes.`,
+      : `Search terminated at node budget limit (${exploredNodesCount} nodes explored, ${openNodesRemaining} unexplored nodes remaining). Feasible suboptimal incumbent preserved with optimality gap: ${gapPct}%.`,
   };
 
   return {
-    solverStatus: isExecutablePlan ? "OPTIMAL_CONVERGED" : "INFEASIBLE_DEFICIT",
+    solverStatus,
     isExecutablePlan,
     executionBlockedReason,
     totalHorizonCost: Math.round(totalHorizonCost),
@@ -1967,7 +2029,7 @@ export function solveEconomicDispatch(input: DispatchInput): OptimizationResult 
   const renewableUtilizationPct = Number(((renewableDispatched / demand) * 100).toFixed(1));
 
   return {
-    solverStatus: "OPTIMAL_CONVERGED",
+    solverStatus: horizonResult.solverStatus,
     isExecutablePlan: true,
     dispatch: dispatchSchedule,
     totalCostPerHour: firstInterval.costRupees,

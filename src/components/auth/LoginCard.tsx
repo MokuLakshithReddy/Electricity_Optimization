@@ -35,8 +35,8 @@ const DEMO_ACCOUNTS = [
 ];
 
 export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
-  const [username, setUsername] = useState(DEMO_ACCOUNTS[0].username);
-  const [password, setPassword] = useState(DEMO_ACCOUNTS[0].pass);
+  const [username, setUsername] = useState(DEMO_ACCOUNTS[0]!.username);
+  const [password, setPassword] = useState(DEMO_ACCOUNTS[0]!.pass);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

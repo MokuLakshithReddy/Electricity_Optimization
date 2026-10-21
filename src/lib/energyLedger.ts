@@ -127,6 +127,7 @@ export function verifyLedgerCryptographicIntegrity(records: EnergyLedgerRecord[]
 
   for (let i = 0; i < records.length; i++) {
     const rec = records[i];
+    if (!rec) continue;
 
     // Check link to previous block
     if (rec.previousBlockHash !== expectedPrev) {
@@ -375,50 +376,50 @@ export function queryLedgerReport(period: "Daily" | "Weekly" | "Monthly"): Aggre
       {
         t: "00:00",
         solar: 0,
-        wind: Math.round(slice[0].windMWh),
-        captive: Math.round(slice[0].captiveMWh),
-        grid: Math.round(slice[0].gridImportMWh),
+        wind: Math.round(slice[0]?.windMWh ?? 0),
+        captive: Math.round(slice[0]?.captiveMWh ?? 0),
+        grid: Math.round(slice[0]?.gridImportMWh ?? 0),
         bess: 0,
       },
       {
         t: "04:00",
         solar: 0,
-        wind: Math.round(slice[4].windMWh),
-        captive: Math.round(slice[4].captiveMWh),
-        grid: Math.round(slice[4].gridImportMWh),
+        wind: Math.round(slice[4]?.windMWh ?? 0),
+        captive: Math.round(slice[4]?.captiveMWh ?? 0),
+        grid: Math.round(slice[4]?.gridImportMWh ?? 0),
         bess: 0,
       },
       {
         t: "08:00",
-        solar: Math.round(slice[8].solarMWh),
-        wind: Math.round(slice[8].windMWh),
-        captive: Math.round(slice[8].captiveMWh),
-        grid: Math.round(slice[8].gridImportMWh),
+        solar: Math.round(slice[8]?.solarMWh ?? 0),
+        wind: Math.round(slice[8]?.windMWh ?? 0),
+        captive: Math.round(slice[8]?.captiveMWh ?? 0),
+        grid: Math.round(slice[8]?.gridImportMWh ?? 0),
         bess: 0,
       },
       {
         t: "12:00",
-        solar: Math.round(slice[12].solarMWh),
-        wind: Math.round(slice[12].windMWh),
-        captive: Math.round(slice[12].captiveMWh),
-        grid: Math.round(slice[12].gridImportMWh),
+        solar: Math.round(slice[12]?.solarMWh ?? 0),
+        wind: Math.round(slice[12]?.windMWh ?? 0),
+        captive: Math.round(slice[12]?.captiveMWh ?? 0),
+        grid: Math.round(slice[12]?.gridImportMWh ?? 0),
         bess: 0,
       },
       {
         t: "16:00",
-        solar: Math.round(slice[16].solarMWh),
-        wind: Math.round(slice[16].windMWh),
-        captive: Math.round(slice[16].captiveMWh),
-        grid: Math.round(slice[16].gridImportMWh),
+        solar: Math.round(slice[16]?.solarMWh ?? 0),
+        wind: Math.round(slice[16]?.windMWh ?? 0),
+        captive: Math.round(slice[16]?.captiveMWh ?? 0),
+        grid: Math.round(slice[16]?.gridImportMWh ?? 0),
         bess: 0,
       },
       {
         t: "20:00",
         solar: 0,
-        wind: Math.round(slice[20].windMWh),
-        captive: Math.round(slice[20].captiveMWh),
-        grid: Math.round(slice[20].gridImportMWh),
-        bess: Math.round(slice[20].bessDischargeMWh),
+        wind: Math.round(slice[20]?.windMWh ?? 0),
+        captive: Math.round(slice[20]?.captiveMWh ?? 0),
+        grid: Math.round(slice[20]?.gridImportMWh ?? 0),
+        bess: Math.round(slice[20]?.bessDischargeMWh ?? 0),
       },
     ];
 
