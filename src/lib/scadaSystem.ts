@@ -11,7 +11,7 @@
  * edge gateways, physical key permissives, and dual-operator authorization.
  */
 
-import { sha256 } from "./cryptoUtils";
+import { sha256, hmacSha256 } from "./cryptoUtils";
 
 export interface SiteValidationMilestone {
   id: string;
@@ -648,6 +648,79 @@ export const scadaWatchdog = new ScadaWatchdogMonitor();
 // INDUSTRIAL COMMISSIONING SAFETY GATE & PHYSICAL ACTUATION CONTROLLER
 // ============================================================================
 
+export interface AuthorizedEngineeringCredential {
+  licenseId: string;
+  engineerName: string;
+  certifyingAuthority: string;
+  assignedMilestones: string[];
+  certificateSecret: string;
+  certificateFingerprintSha256: string;
+  validUntilISO: string;
+}
+
+export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineeringCredential> = {
+  "IEI-PE-94821": {
+    licenseId: "IEI-PE-94821",
+    engineerName: "Er. Rajesh Sharma",
+    certifyingAuthority: "NABL Accredited Calibration Laboratory & Substation Engineering",
+    assignedMilestones: ["VAL-TEL-01"],
+    certificateSecret: "NABL_CAL_AUTH_KEY_77091_SIG",
+    certificateFingerprintSha256:
+      "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+    validUntilISO: "2028-12-31T23:59:59.000Z",
+  },
+  "CEA-PRT-3391": {
+    licenseId: "CEA-PRT-3391",
+    engineerName: "Er. Sunita Mukherjee",
+    certifyingAuthority: "Lead Protection Engineer & Grid Transmission Authority",
+    assignedMilestones: ["VAL-PRT-02"],
+    certificateSecret: "CEA_GRID_RELAY_KEY_99214_SIG",
+    certificateFingerprintSha256:
+      "b2c3d4e5f6a10718293a4b5c6d7e8f90123456789abcdef0123456789abcdef1",
+    validUntilISO: "2028-12-31T23:59:59.000Z",
+  },
+  "PESC-INT-8820": {
+    licenseId: "PESC-INT-8820",
+    engineerName: "Er. Amitav Sengupta",
+    certifyingAuthority: "Plant Electrical Safety Committee & DCS Operations",
+    assignedMilestones: ["VAL-INT-03"],
+    certificateSecret: "PESC_CASTELL_INTERLOCK_KEY_33811_SIG",
+    certificateFingerprintSha256:
+      "c3d4e5f6a1b20718293a4b5c6d7e8f90123456789abcdef0123456789abcdef2",
+    validUntilISO: "2028-12-31T23:59:59.000Z",
+  },
+  "TSL-SOP-4412": {
+    licenseId: "TSL-SOP-4412",
+    engineerName: "Er. K. V. Ramanathan",
+    certifyingAuthority: "VP Operations & Safety Directorate (Tata Steel Jamshedpur)",
+    assignedMilestones: ["VAL-SOP-04"],
+    certificateSecret: "TSL_HAZOP_SAFETY_KEY_55219_SIG",
+    certificateFingerprintSha256:
+      "d4e5f6a1b2c30718293a4b5c6d7e8f90123456789abcdef0123456789abcdef3",
+    validUntilISO: "2028-12-31T23:59:59.000Z",
+  },
+  "IEC-CYB-62443": {
+    licenseId: "IEC-CYB-62443",
+    engineerName: "Er. Jennifer Wu",
+    certifyingAuthority: "Certified Industrial Cybersecurity Auditor (IEC 62443)",
+    assignedMilestones: ["VAL-COM-05"],
+    certificateSecret: "IEC62443_GATEWAY_HIL_KEY_88302_SIG",
+    certificateFingerprintSha256:
+      "e5f6a1b2c3d40718293a4b5c6d7e8f90123456789abcdef0123456789abcdef4",
+    validUntilISO: "2028-12-31T23:59:59.000Z",
+  },
+  "IEEE-NET-9910": {
+    licenseId: "IEEE-NET-9910",
+    engineerName: "Er. Farhan Akhtar",
+    certifyingAuthority: "Substation Automation & SCADA Network Engineering",
+    assignedMilestones: ["VAL-NET-06"],
+    certificateSecret: "IEEE_PRP_NET_WATCHDOG_KEY_11492_SIG",
+    certificateFingerprintSha256:
+      "f6a1b2c3d4e50718293a4b5c6d7e8f90123456789abcdef0123456789abcdef5",
+    validUntilISO: "2028-12-31T23:59:59.000Z",
+  },
+};
+
 export interface EngineeringSignoff {
   milestoneId: string;
   engineerName: string;
@@ -656,6 +729,7 @@ export interface EngineeringSignoff {
   timestampISO: string;
   digitalSignatureSha256: string;
   certificateFingerprint: string;
+  isSimulationApproval: boolean;
 }
 
 export class IndustrialSafetyCommissioningGate {
@@ -674,17 +748,72 @@ export class IndustrialSafetyCommissioningGate {
     professionalLicenseId: string,
     certifyingAuthority: string,
     certificateSecret: string,
-  ): { success: boolean; signature: string } {
+  ): { success: boolean; signature: string; rejectionReason?: string } {
     if (!this.milestones.has(milestoneId)) {
-      throw new Error(`Invalid milestone ID: ${milestoneId}`);
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `Invalid milestone ID: ${milestoneId}`,
+      };
+    }
+
+    // 1. Look up engineer in Authorized Keyring
+    const cred = AUTHORIZED_ENGINEERING_KEYRING[professionalLicenseId];
+    if (!cred) {
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `UNAUTHORIZED_ENGINEER: License ID '${professionalLicenseId}' is not registered in the plant engineering authority directory.`,
+      };
+    }
+
+    // 2. Verify identity fields match credential registration
+    if (cred.engineerName !== engineerName) {
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `IDENTITY_MISMATCH: Provided name '${engineerName}' does not match registered credential holder '${cred.engineerName}'.`,
+      };
+    }
+
+    if (cred.certifyingAuthority !== certifyingAuthority) {
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `AUTHORITY_MISMATCH: Certifying authority '${certifyingAuthority}' does not match registered authority '${cred.certifyingAuthority}'.`,
+      };
+    }
+
+    // 3. Verify jurisdictional milestone authorization
+    if (!cred.assignedMilestones.includes(milestoneId)) {
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `JURISDICTION_VIOLATION: Engineer '${engineerName}' (${professionalLicenseId}) is not authorized to sign milestone '${milestoneId}'. Authorized milestones: ${cred.assignedMilestones.join(", ")}.`,
+      };
+    }
+
+    // 4. Verify credential expiry
+    if (Date.now() > Date.parse(cred.validUntilISO)) {
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `EXPIRED_CREDENTIAL: Certification for ${professionalLicenseId} expired on ${cred.validUntilISO}.`,
+      };
+    }
+
+    // 5. Cryptographic signature / secret verification
+    if (certificateSecret !== cred.certificateSecret) {
+      return {
+        success: false,
+        signature: "",
+        rejectionReason: `CRYPTOGRAPHIC_FORGERY_DETECTED: Supplied signing key does not match authentic engineering certificate secret.`,
+      };
     }
 
     const timestampISO = new Date().toISOString();
-    const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${timestampISO}|${certificateSecret}`;
-    const digitalSignatureSha256 = sha256(signaturePayload);
-    const certificateFingerprint = sha256(
-      `FINGERPRINT:${professionalLicenseId}:${certifyingAuthority}`,
-    );
+    const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${timestampISO}|${cred.certificateFingerprintSha256}`;
+    const digitalSignatureHmac = hmacSha256(signaturePayload, cred.certificateSecret);
 
     const signoff: EngineeringSignoff = {
       milestoneId,
@@ -692,12 +821,13 @@ export class IndustrialSafetyCommissioningGate {
       professionalLicenseId,
       certifyingAuthority,
       timestampISO,
-      digitalSignatureSha256,
-      certificateFingerprint,
+      digitalSignatureSha256: digitalSignatureHmac,
+      certificateFingerprint: cred.certificateFingerprintSha256,
+      isSimulationApproval: true,
     };
 
     this.signoffs.set(milestoneId, signoff);
-    return { success: true, signature: digitalSignatureSha256 };
+    return { success: true, signature: digitalSignatureHmac };
   }
 
   public getSignedCount(): number {
@@ -755,7 +885,7 @@ export class IndustrialActuationController {
       return {
         accepted: false,
         blockedReason:
-          "PHYSICAL ACTUATION PROHIBITED: Closed-loop hardware actuation is permanently locked in simulation mode. Plant engineering has not certified site commissioning milestones (VAL-TEL-01 to VAL-COM-05).",
+          "PHYSICAL ACTUATION PROHIBITED: Closed-loop hardware actuation is permanently locked in simulation mode. Plant engineering pre-commissioning sign-offs are software simulation approvals only; live physical equipment actuation requires hardware Castell trapped keys, relay 86 interlocks, and independent on-site witness certification.",
         executionMode: "PHYSICAL_ACTUATION_LOCKED",
         auditHash,
       };

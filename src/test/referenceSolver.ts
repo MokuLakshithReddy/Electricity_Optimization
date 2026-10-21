@@ -21,6 +21,7 @@ import {
   solveGeneralLP,
 } from "../lib/optimizationEngine";
 import { tariffRates } from "../data/emissionFactors";
+import { sha256 } from "../lib/cryptoUtils";
 
 export interface ReferenceLPProblem {
   c: number[]; // Objective coefficients (to minimize)
@@ -707,22 +708,90 @@ export function solveContinuousRelaxationLowerBound(input: HorizonDispatchInput)
   };
 }
 
+export interface MathematicalOptimalityCertificate {
+  isCertifiedGloballyOptimal: boolean;
+  continuousRelaxationLowerBoundINR: number;
+  candidateScheduleCostINR: number;
+  dualityGapINR: number;
+  dualityGapPercent: number;
+  weakDualitySatisfied: boolean;
+  maxPermissibleDualityGapPercent: number;
+  mathematicalProofMethod: "CONTINUOUS_RELAXATION_WEAK_DUALITY_LOWER_BOUND";
+  certificateSummary: string;
+  certificateHashSha256: string;
+}
+
 /**
- * Independent 24-Hour Industrial Multi-Stage Combinatorial Benchmark:
+ * Mathematically Valid Full-Horizon Optimality Certificate:
+ * Uses LP Weak Duality Theorem: For any MILP, min c^T x over integer binary points
+ * is strictly bounded from below by min c^T x over the continuous LP relaxation.
+ * Therefore Z_LB = min continuous relaxation is a certified universal lower bound
+ * across ALL 2^24 combinatorial commitment states.
+ *
+ * When an integer schedule achieves cost Z* such that (Z* - Z_LB) / Z* <= 0.05%,
+ * it is mathematically proven to be within 0.05% of the absolute global minimum.
+ */
+export function certify24HourGlobalOptimality(
+  input: HorizonDispatchInput,
+  candidateScheduleCostINR: number,
+): MathematicalOptimalityCertificate {
+  const lbResult = solveContinuousRelaxationLowerBound(input);
+  if (lbResult.status !== "OPTIMAL") {
+    throw new Error("Cannot certify optimality: Continuous LP relaxation is infeasible.");
+  }
+
+  const zLB = lbResult.lowerBoundCost;
+  const zCandidate = candidateScheduleCostINR;
+  // Numerical tolerance for floating-point LP rounding across multi-million rupee objectives
+  const numericalToleranceINR = Math.max(10.0, 0.0001 * zCandidate);
+  const weakDualitySatisfied = zLB <= zCandidate + numericalToleranceINR;
+  const dualityGapINR = Math.max(0, zCandidate - zLB);
+  const dualityGapPercent = (dualityGapINR / zCandidate) * 100;
+  const maxPermissibleDualityGapPercent = 0.05;
+
+  const isCertifiedGloballyOptimal =
+    weakDualitySatisfied && dualityGapPercent <= maxPermissibleDualityGapPercent;
+
+  let certificateSummary: string;
+  if (isCertifiedGloballyOptimal) {
+    certificateSummary = `MATHEMATICAL GLOBAL OPTIMALITY CERTIFICATE: Continuous dual relaxation lower bound Z_LB (₹${zLB.toLocaleString("en-IN")}) <= Integer Candidate Z* (₹${zCandidate.toLocaleString("en-IN")}) with duality gap ${dualityGapPercent.toFixed(4)}% (<= ${maxPermissibleDualityGapPercent}%). Weak duality proves no combinatorial schedule among all 2^24 states can beat Z_LB.`;
+  } else if (!weakDualitySatisfied) {
+    certificateSummary = `OPTIMALITY NOT CERTIFIED: Weak duality lower bound violated by numerical deviation > ${numericalToleranceINR} INR.`;
+  } else {
+    certificateSummary = `OPTIMALITY NOT CERTIFIED: Duality gap ${dualityGapPercent.toFixed(4)}% exceeds ${maxPermissibleDualityGapPercent}% threshold.`;
+  }
+
+  const payload = `GLOBAL_OPT_CERT|${input.horizonHours}|${zLB}|${zCandidate}|${dualityGapPercent.toFixed(6)}|${isCertifiedGloballyOptimal}`;
+  const certificateHashSha256 = sha256(payload);
+
+  return {
+    isCertifiedGloballyOptimal,
+    continuousRelaxationLowerBoundINR: zLB,
+    candidateScheduleCostINR: zCandidate,
+    dualityGapINR,
+    dualityGapPercent,
+    weakDualitySatisfied,
+    maxPermissibleDualityGapPercent,
+    mathematicalProofMethod: "CONTINUOUS_RELAXATION_WEAK_DUALITY_LOWER_BOUND",
+    certificateSummary,
+    certificateHashSha256,
+  };
+}
+
+/**
+ * Operational Shift Heuristic Benchmark (Myopic 3-Stage Sequential Decomposition):
  * Decomposes the 24-hour industrial horizon into three sequential 8-hour operational shifts
  * (Shift C: 00:00-08:00, Shift A: 08:00-16:00, Shift B: 16:00-24:00).
  *
- * For each 8-hour shift, evaluates ALL 2^8 = 256 binary unit commitment states exhaustively
- * via continuous primal simplex (totaling 768 exact LP evaluations).
- * Links the shift boundaries with exact physical state continuity:
- *   - Battery SoC trajectory carryover
- *   - Captive generation inter-temporal ramp limits
- *   - Diesel generator commitment status and ramping limits
+ * CAUTION: This is an OPERATIONAL SHIFT HEURISTIC, NOT an independent global-optimality proof!
+ * It evaluates 2^8 = 256 commitment states per 8-hour shift sequentially, committing
+ * to each shift before optimizing the next. Because decisions at t in [0, 8) constrain
+ * battery SoC and generator ramp states for t in [8, 16) and [16, 24), sequential
+ * shift planning misses holistic multi-interval arbitrage opportunities.
  *
- * Combined with the continuous dual relaxation lower bound Z_LB, this independently
- * establishes the 24-hour global optimality bounds and certified physical correctness.
+ * Full-horizon global optimality is certified separately via certify24HourGlobalOptimality().
  */
-export function solve24HourMultiStageExhaustiveBenchmark(
+export function solve3StageShiftHeuristicBenchmark(
   input: HorizonDispatchInput,
 ): ReferenceMILPResult {
   const H = input.horizonHours;
@@ -769,7 +838,7 @@ export function solve24HourMultiStageExhaustiveBenchmark(
         totalCost: 0,
         commitment: [],
         intervals: [],
-        method: "24-Hour Multi-Stage Exhaustive Decomposition",
+        method: "3-Stage Shift Heuristic Benchmark (Sequential Operational Decomposition)",
       };
     }
 
@@ -798,9 +867,14 @@ export function solve24HourMultiStageExhaustiveBenchmark(
     totalCost: Math.round(totalCost),
     commitment: combinedCommitment,
     intervals: combinedIntervals,
-    method: "24-Hour Multi-Stage 3x2^8 Exhaustive Benchmark",
+    method: "3-Stage Shift Heuristic Benchmark (Sequential Operational Decomposition)",
   };
 }
+
+/**
+ * Backwards-compatible alias for the 3-stage shift heuristic benchmark.
+ */
+export const solve24HourMultiStageExhaustiveBenchmark = solve3StageShiftHeuristicBenchmark;
 
 /**
  * Full Multi-Period Reference Benchmark Entry Point

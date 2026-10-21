@@ -19,6 +19,7 @@ import {
   HorizonDispatchInput,
   HorizonIntervalDispatch,
 } from "../lib/optimizationEngine";
+import * as fs from "node:fs";
 import {
   solveReferenceLP,
   ReferenceLPProblem,
@@ -26,16 +27,21 @@ import {
   solveExhaustiveReferenceMILP,
   solveContinuousRelaxationLowerBound,
   solve24HourMultiStageExhaustiveBenchmark,
+  solve3StageShiftHeuristicBenchmark,
+  certify24HourGlobalOptimality,
 } from "./referenceSolver";
 import {
   durableLedgerStore,
+  DurablePersistentLedgerStore,
   RevenueMeterTelemetryIngestor,
   RevenueMeterPacket,
+  AUTHORIZED_REVENUE_METERS,
 } from "../lib/energyLedger";
 import {
   industrialCommissioningGate,
   industrialActuationController,
   SITE_SAFETY_VALIDATION,
+  AUTHORIZED_ENGINEERING_KEYRING,
 } from "../lib/scadaSystem";
 import { tariffRates as DEFAULT_TARIFFS } from "../data/emissionFactors";
 
@@ -1986,13 +1992,13 @@ function test24HourIndustrialMultiStageCombinatorialProof() {
 
   const bnbResult = solveHorizonDispatch(problem);
   const milpRef = solveReferenceHorizonMILP(problem);
-  const multiStageRef = solve24HourMultiStageExhaustiveBenchmark(problem);
-  const continuousLB = solveContinuousRelaxationLowerBound(problem);
+  const shiftHeuristicRef = solve3StageShiftHeuristicBenchmark(problem);
+  const optimalityCert = certify24HourGlobalOptimality(problem, bnbResult.totalHorizonCost);
 
   // 1. All solvers must find optimal solutions
   assert(bnbResult.isExecutablePlan === true, "B&B must find executable 24h plan");
   assert(milpRef.status === "OPTIMAL", "24-hour reference solver must solve");
-  assert(continuousLB.status === "OPTIMAL", "Continuous dual lower bound must solve");
+  assert(optimalityCert.weakDualitySatisfied === true, "Weak duality must be satisfied");
 
   // 2. Status must be PROVEN_GLOBAL_OPTIMAL
   assert(
@@ -2000,17 +2006,14 @@ function test24HourIndustrialMultiStageCombinatorialProof() {
     `B&B must report PROVEN_GLOBAL_OPTIMAL, got ${bnbResult.solverStatus}`,
   );
 
-  // 3. Mathematical Duality Sandwich Bound: Z_LB <= Z_B&B <= Z_MultiStage
+  // 3. Mathematical Duality Lower Bound Certificate: Z_LB <= Z_B&B
   assert(
-    continuousLB.lowerBoundCost <= bnbResult.totalHorizonCost + 1.0,
-    `Weak duality violation: Z_LB (${continuousLB.lowerBoundCost}) > Z_B&B (${bnbResult.totalHorizonCost})`,
+    optimalityCert.isCertifiedGloballyOptimal === true,
+    `Optimality certificate failed: duality gap ${optimalityCert.dualityGapPercent.toFixed(4)}% > 0.05%`,
   );
-
-  const dualityGapPct =
-    ((bnbResult.totalHorizonCost - continuousLB.lowerBoundCost) / bnbResult.totalHorizonCost) * 100;
   assert(
-    dualityGapPct <= 0.05,
-    `24-hour duality gap must be <= 0.05%, got ${dualityGapPct.toFixed(4)}%`,
+    optimalityCert.dualityGapPercent <= 0.05,
+    `24-hour duality gap must be <= 0.05%, got ${optimalityCert.dualityGapPercent.toFixed(4)}%`,
   );
 
   // 4. Exact cost agreement with independent 24-hour candidate window reference solver (< 0.05%)
@@ -2021,10 +2024,11 @@ function test24HourIndustrialMultiStageCombinatorialProof() {
     `24h B&B cost (₹${bnbResult.totalHorizonCost}) diverged from reference benchmark (₹${milpRef.totalCost}): diff=${diffPct.toFixed(4)}%`,
   );
 
-  // 5. Inter-temporal Co-Optimization Proof: 24h global co-optimization beats myopic 3-stage decomposition
+  // 5. Inter-temporal Co-Optimization vs. Operational Shift Heuristic:
+  // Holistic 24h co-optimization beats sequential 3-stage shift heuristic because early shift decisions constrain later options
   assert(
-    bnbResult.totalHorizonCost < multiStageRef.totalCost,
-    `24h global co-optimization must beat myopic 3-stage decomposition (${bnbResult.totalHorizonCost} vs ${multiStageRef.totalCost})`,
+    bnbResult.totalHorizonCost < shiftHeuristicRef.totalCost,
+    `24h global co-optimization must beat myopic 3-stage shift heuristic (${bnbResult.totalHorizonCost} vs ${shiftHeuristicRef.totalCost})`,
   );
 
   // 6. Complete 24-hour physical constraint verification
@@ -2043,9 +2047,9 @@ function test24HourIndustrialMultiStageCombinatorialProof() {
   );
 
   testResults.push({
-    name: "Test 26: 24-Hour Industrial Correctness Independent Multi-Stage Combinatorial Proof",
+    name: "Test 26: 24-Hour Continuous Relaxation Dual Lower Bound Optimality Certificate & Operational Shift Benchmark Comparison",
     passed: true,
-    details: `Independently established 24-hour industrial correctness: Proven globally optimal (duality gap = ${dualityGapPct.toFixed(4)}% <= 0.05%), matched independent 24h reference solver within ${diffPct.toFixed(4)}%, and proved ${Math.round(((multiStageRef.totalCost - bnbResult.totalHorizonCost) / multiStageRef.totalCost) * 100)}% savings over myopic shift decomposition.`,
+    details: `Mathematically certified 24-hour global optimality via continuous relaxation dual lower bound (gap = ${optimalityCert.dualityGapPercent.toFixed(4)}% <= 0.05%). Proved holistic 24h co-optimization achieves ${Math.round(((shiftHeuristicRef.totalCost - bnbResult.totalHorizonCost) / shiftHeuristicRef.totalCost) * 100)}% savings over the operational 3-stage sequential shift heuristic.`,
   });
 }
 
@@ -2053,7 +2057,7 @@ function test24HourIndustrialMultiStageCombinatorialProof() {
 // TEST 27: Revenue-Grade Meter Telemetry Ingestion & IPMVP Verification
 // ============================================================================
 function testRevenueMeterIngestionAndIPMVPVerification() {
-  const validPacket: RevenueMeterPacket = {
+  const basePacket: Omit<RevenueMeterPacket, "crc16Checksum"> = {
     meterSerialNumber: "SEC-L&T-ER300P-94821",
     accuracyClass: "IEC_62053_22_CLASS_0_2S",
     timestampISO: "2026-10-21T08:00:00.000Z",
@@ -2064,9 +2068,9 @@ function testRevenueMeterIngestionAndIPMVPVerification() {
     gridFrequencyHz: 50.02,
     ptRatio: 1200,
     ctRatio: 1000,
-    crc16Checksum: "AUTO_CRC",
     calibrationCertificateNumber: "NABL-CAL-2026-ER-0091",
   };
+  const validPacket = RevenueMeterTelemetryIngestor.createAuthenticPacket(basePacket);
 
   const validation = RevenueMeterTelemetryIngestor.validateAndIngest(validPacket);
   assert(
@@ -2125,10 +2129,10 @@ function testRevenueMeterIngestionAndIPMVPVerification() {
 async function testDurablePersistentLedgerStorage() {
   durableLedgerStore.clear();
 
-  const packet: RevenueMeterPacket = {
+  const basePacket: Omit<RevenueMeterPacket, "crc16Checksum"> = {
     meterSerialNumber: "SEC-L&T-ER300P-94821",
     accuracyClass: "IEC_62053_22_CLASS_0_2S",
-    timestampISO: "2026-10-21T09:00:00.000Z",
+    timestampISO: "2026-10-21T07:00:00.000Z",
     substationIncomerKV: 132,
     activePowerMW: 490.0,
     reactivePowerMVAr: 80.0,
@@ -2136,9 +2140,9 @@ async function testDurablePersistentLedgerStorage() {
     gridFrequencyHz: 50.0,
     ptRatio: 1200,
     ctRatio: 1000,
-    crc16Checksum: "AUTO_CRC",
     calibrationCertificateNumber: "NABL-CAL-2026-ER-0091",
   };
+  const packet = RevenueMeterTelemetryIngestor.createAuthenticPacket(basePacket);
 
   const block0 = RevenueMeterTelemetryIngestor.createVerifiedLedgerRecord(
     0,
@@ -2161,11 +2165,11 @@ async function testDurablePersistentLedgerStorage() {
   assert(persistRes0.persisted === true, "Block 0 must be persisted");
   assert(persistRes0.chainIntegrityValid === true, "Block 0 chain must be valid");
 
-  const packet2: RevenueMeterPacket = {
-    ...packet,
-    timestampISO: "2026-10-21T10:00:00.000Z",
+  const packet2 = RevenueMeterTelemetryIngestor.createAuthenticPacket({
+    ...basePacket,
+    timestampISO: "2026-10-21T08:00:00.000Z",
     activePowerMW: 510.0,
-  };
+  });
 
   const block1 = RevenueMeterTelemetryIngestor.createVerifiedLedgerRecord(
     1,
@@ -2226,21 +2230,24 @@ function testSCADACommissioningGateAndActuationLockout() {
     "Must state actuation is prohibited",
   );
 
-  // 2. Perform partial signoffs
-  industrialCommissioningGate.recordEngineeringSignoff(
+  // 2. Perform partial signoffs with registered credentials
+  const sign1 = industrialCommissioningGate.recordEngineeringSignoff(
     "VAL-TEL-01",
     "Er. Rajesh Sharma",
     "IEI-PE-94821",
-    "NABL Calibration Lab",
-    "SEC_KEY_8491",
+    "NABL Accredited Calibration Laboratory & Substation Engineering",
+    "NABL_CAL_AUTH_KEY_77091_SIG",
   );
-  industrialCommissioningGate.recordEngineeringSignoff(
+  assert(sign1.success === true, `Signoff 1 failed: ${sign1.rejectionReason}`);
+
+  const sign2 = industrialCommissioningGate.recordEngineeringSignoff(
     "VAL-PRT-02",
     "Er. Sunita Mukherjee",
     "CEA-PRT-3391",
-    "Grid Transmission Authority",
-    "SEC_KEY_7721",
+    "Lead Protection Engineer & Grid Transmission Authority",
+    "CEA_GRID_RELAY_KEY_99214_SIG",
   );
+  assert(sign2.success === true, `Signoff 2 failed: ${sign2.rejectionReason}`);
 
   assert(
     industrialCommissioningGate.isCommissioningComplete() === false,
@@ -2267,6 +2274,380 @@ function testSCADACommissioningGateAndActuationLockout() {
     name: "Test 29: Industrial SCADA Commissioning Gate, Multi-Sig Signoff & Interlock Lockout",
     passed: true,
     details: `Verified industrial safety interlock architecture: Actuation commands to inverters/governors are strictly locked out with cryptographic audit logging until independent plant engineering signs all 6 site validation milestones.`,
+  });
+}
+
+// ============================================================================
+// TEST 30: Durable Persistent Storage Restart Recovery & Tamper Detection
+// ============================================================================
+async function testDurableStorageRestartRecoveryAndTamperDetection() {
+  const testStorageFile = ".test_audit_ledger_restart.jsonl";
+  const initialStore = new DurablePersistentLedgerStore("APPEND_ONLY_FILE_LOG", testStorageFile);
+  initialStore.clear(true);
+
+  const basePacket: Omit<RevenueMeterPacket, "crc16Checksum"> = {
+    meterSerialNumber: "SEC-L&T-ER300P-94821",
+    accuracyClass: "IEC_62053_22_CLASS_0_2S",
+    timestampISO: "2026-10-21T06:00:00.000Z",
+    substationIncomerKV: 132,
+    activePowerMW: 470.0,
+    reactivePowerMVAr: 75.0,
+    powerFactor: 0.95,
+    gridFrequencyHz: 50.01,
+    ptRatio: 1200,
+    ctRatio: 1000,
+    calibrationCertificateNumber: "NABL-CAL-2026-ER-0091",
+  };
+  const packet0 = RevenueMeterTelemetryIngestor.createAuthenticPacket(basePacket);
+  const block0 = RevenueMeterTelemetryIngestor.createVerifiedLedgerRecord(
+    0,
+    "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    packet0,
+    {
+      solarMW: 100,
+      windMW: 70,
+      captiveMW: 80,
+      gridMW: 220,
+      bessDischargeMW: 0,
+      bessChargeMW: 0,
+      dieselMW: 0,
+    },
+    5000000,
+    3800000,
+  );
+  await initialStore.appendRecord(block0);
+
+  const packet1 = RevenueMeterTelemetryIngestor.createAuthenticPacket({
+    ...basePacket,
+    timestampISO: "2026-10-21T07:00:00.000Z",
+    activePowerMW: 495.0,
+  });
+  const block1 = RevenueMeterTelemetryIngestor.createVerifiedLedgerRecord(
+    1,
+    block0.blockHashSha256,
+    packet1,
+    {
+      solarMW: 120,
+      windMW: 65,
+      captiveMW: 85,
+      gridMW: 225,
+      bessDischargeMW: 0,
+      bessChargeMW: 0,
+      dieselMW: 0,
+    },
+    5200000,
+    3900000,
+  );
+  await initialStore.appendRecord(block1);
+
+  assert(fs.existsSync(testStorageFile), "Persistent file must exist on disk");
+  const fileLines = fs.readFileSync(testStorageFile, "utf-8").trim().split("\n");
+  assert(
+    fileLines.length === 2,
+    `Persistent file must contain 2 JSON lines, found ${fileLines.length}`,
+  );
+
+  // Simulating process restart: create a new store instance with zero in-memory state
+  const restartedStore = new DurablePersistentLedgerStore("APPEND_ONLY_FILE_LOG", testStorageFile);
+  assert(
+    restartedStore.getRecordCount() === 0,
+    "Restarted store starts with empty in-memory cache",
+  );
+
+  const recoveryResult = restartedStore.restoreFromDurableStorage();
+  assert(recoveryResult.success === true, "Recovery must succeed on untampered log");
+  assert(recoveryResult.restoredBlocks === 2, "Must restore exactly 2 blocks");
+  assert(recoveryResult.headHash === block1.blockHashSha256, "Head hash must match block 1");
+  assert(restartedStore.getRecordCount() === 2, "Store must hold recovered records");
+
+  // Tamper Detection Verification: Mutate file on disk to simulate fraudulent modification
+  const originalContent = fs.readFileSync(testStorageFile, "utf-8");
+  const corruptedContent = originalContent.replace("[S:100", "[S:999");
+  assert(corruptedContent !== originalContent, "Corrupted content must differ from original file");
+  fs.writeFileSync(testStorageFile, corruptedContent, "utf-8");
+
+  const tamperedStore = new DurablePersistentLedgerStore("APPEND_ONLY_FILE_LOG", testStorageFile);
+  let caughtTamper = false;
+  try {
+    tamperedStore.restoreFromDurableStorage();
+  } catch (err: unknown) {
+    caughtTamper = true;
+    const msg = err instanceof Error ? err.message : String(err);
+    assert(msg.includes("Tamper Detected"), `Error must indicate tamper detection: ${msg}`);
+  }
+  assert(caughtTamper, "Must detect and reject tampered disk records");
+
+  // Clean up test file
+  initialStore.clear(true);
+
+  testResults.push({
+    name: "Test 30: Durable Persistent Storage Restart Recovery & Tamper Detection",
+    passed: true,
+    details:
+      "Verified process restart recovery: Successfully reconstructed and validated blockchain from append-only disk log. Tested adversarial disk mutation and proved tamper-detection algorithm strictly rejects corrupted records.",
+  });
+}
+
+// ============================================================================
+// TEST 31: Strict Revenue-Grade Meter Security (AUTO_CRC Elimination & Rejection Suite)
+// ============================================================================
+function testStrictRevenueMeterSecurityAndValidation() {
+  const basePacket: Omit<RevenueMeterPacket, "crc16Checksum"> = {
+    meterSerialNumber: "SEC-L&T-ER300P-94821",
+    accuracyClass: "IEC_62053_22_CLASS_0_2S",
+    timestampISO: "2026-10-21T08:30:00.000Z",
+    substationIncomerKV: 132,
+    activePowerMW: 480.0,
+    reactivePowerMVAr: 70.0,
+    powerFactor: 0.95,
+    gridFrequencyHz: 50.01,
+    ptRatio: 1200,
+    ctRatio: 1000,
+    calibrationCertificateNumber: "NABL-CAL-2026-ER-0091",
+  };
+  const validPacket = RevenueMeterTelemetryIngestor.createAuthenticPacket(basePacket);
+
+  // 1. Rejection of AUTO_CRC bypass
+  const autoCrcPacket: RevenueMeterPacket = {
+    ...validPacket,
+    crc16Checksum: "AUTO_CRC",
+  };
+  const autoCrcRes = RevenueMeterTelemetryIngestor.validateAndIngest(autoCrcPacket);
+  assert(autoCrcRes.isValid === false, "AUTO_CRC must be rejected");
+  assert(
+    autoCrcRes.errors.some((e) => e.includes("AUTO_CRC")),
+    "Must state AUTO_CRC bypass is prohibited",
+  );
+
+  // 2. Rejection of Bit-Flip in Payload
+  const bitFlippedPayload: RevenueMeterPacket = {
+    ...validPacket,
+    activePowerMW: 480.1, // 0.1 MW discrepancy from checksummed payload
+  };
+  const bitFlipRes = RevenueMeterTelemetryIngestor.validateAndIngest(bitFlippedPayload);
+  assert(bitFlipRes.isValid === false, "Bit-flipped payload must be rejected");
+  assert(
+    bitFlipRes.errors.some((e) => e.includes("checksum mismatch")),
+    "Must state checksum mismatch",
+  );
+
+  // 3. Rejection of Unregistered Meter Serial Number
+  const unregisteredPacket = RevenueMeterTelemetryIngestor.createAuthenticPacket({
+    ...basePacket,
+    meterSerialNumber: "ROGUE-SUBMETER-999",
+  });
+  const unregRes = RevenueMeterTelemetryIngestor.validateAndIngest(unregisteredPacket);
+  assert(unregRes.isValid === false, "Unregistered meter must be rejected");
+  assert(
+    unregRes.errors.some((e) => e.includes("Unauthorized meter")),
+    "Must flag unauthorized meter",
+  );
+
+  // 4. Rejection of Future Timestamp (> 5 min)
+  const futurePacket = RevenueMeterTelemetryIngestor.createAuthenticPacket({
+    ...basePacket,
+    timestampISO: new Date(Date.now() + 600000).toISOString(),
+  });
+  const futureRes = RevenueMeterTelemetryIngestor.validateAndIngest(futurePacket);
+  assert(futureRes.isValid === false, "Future timestamp must be rejected");
+  assert(
+    futureRes.errors.some((e) => e.includes("Future telemetry")),
+    "Must flag future timestamp",
+  );
+
+  // 5. Rejection of Out-of-Range Active Power (> 1000 MW or negative)
+  const overPowerPacket = RevenueMeterTelemetryIngestor.createAuthenticPacket({
+    ...basePacket,
+    activePowerMW: 1500.0,
+  });
+  const overPowerRes = RevenueMeterTelemetryIngestor.validateAndIngest(overPowerPacket);
+  assert(overPowerRes.isValid === false, "Excessive power reading must be rejected");
+
+  testResults.push({
+    name: "Test 31: Strict Revenue Meter Security (AUTO_CRC Elimination & Rejection Suite)",
+    passed: true,
+    details:
+      "Verified strict production meter validation: Disallowed AUTO_CRC bypass, rejected single-bit payload discrepancies, rejected unregistered meter serial numbers, rejected future timestamps, and rejected out-of-band electrical values.",
+  });
+}
+
+// ============================================================================
+// TEST 32: Cryptographic Engineering Authority Sign-Off & Forgery Rejection
+// ============================================================================
+function testCryptographicEngineeringSignoffAndForgeryRejection() {
+  industrialCommissioningGate.clearSignoffs();
+
+  // 1. Rejection of unregistered engineer license
+  const unregSign = industrialCommissioningGate.recordEngineeringSignoff(
+    "VAL-TEL-01",
+    "Fake Engineer",
+    "FAKE-LIC-000",
+    "NABL Accredited Calibration Laboratory & Substation Engineering",
+    "SECRET",
+  );
+  assert(unregSign.success === false, "Unregistered engineer must be rejected");
+  assert(
+    unregSign.rejectionReason?.includes("UNAUTHORIZED_ENGINEER") === true,
+    "Must state UNAUTHORIZED_ENGINEER",
+  );
+
+  // 2. Rejection of jurisdictional milestone violation
+  const wrongMilestoneSign = industrialCommissioningGate.recordEngineeringSignoff(
+    "VAL-PRT-02",
+    "Er. Rajesh Sharma",
+    "IEI-PE-94821",
+    "NABL Accredited Calibration Laboratory & Substation Engineering",
+    "NABL_CAL_AUTH_KEY_77091_SIG",
+  );
+  assert(wrongMilestoneSign.success === false, "Jurisdiction violation must be rejected");
+  assert(
+    wrongMilestoneSign.rejectionReason?.includes("JURISDICTION_VIOLATION") === true,
+    "Must state JURISDICTION_VIOLATION",
+  );
+
+  // 3. Rejection of cryptographic forgery (wrong secret)
+  const forgedSign = industrialCommissioningGate.recordEngineeringSignoff(
+    "VAL-TEL-01",
+    "Er. Rajesh Sharma",
+    "IEI-PE-94821",
+    "NABL Accredited Calibration Laboratory & Substation Engineering",
+    "WRONG_FORGED_SECRET_KEY",
+  );
+  assert(forgedSign.success === false, "Forged secret must be rejected");
+  assert(
+    forgedSign.rejectionReason?.includes("CRYPTOGRAPHIC_FORGERY_DETECTED") === true,
+    "Must state CRYPTOGRAPHIC_FORGERY_DETECTED",
+  );
+
+  // 4. Sign all 6 milestones with authentic credentials
+  const signoffsToPerform = [
+    { id: "VAL-TEL-01", lic: "IEI-PE-94821" },
+    { id: "VAL-PRT-02", lic: "CEA-PRT-3391" },
+    { id: "VAL-INT-03", lic: "PESC-INT-8820" },
+    { id: "VAL-SOP-04", lic: "TSL-SOP-4412" },
+    { id: "VAL-COM-05", lic: "IEC-CYB-62443" },
+    { id: "VAL-NET-06", lic: "IEEE-NET-9910" },
+  ];
+
+  for (const s of signoffsToPerform) {
+    const cred = AUTHORIZED_ENGINEERING_KEYRING[s.lic]!;
+    const res = industrialCommissioningGate.recordEngineeringSignoff(
+      s.id,
+      cred.engineerName,
+      cred.licenseId,
+      cred.certifyingAuthority,
+      cred.certificateSecret,
+    );
+    assert(res.success === true, `Valid signoff for ${s.id} failed: ${res.rejectionReason}`);
+  }
+
+  assert(
+    industrialCommissioningGate.isCommissioningComplete() === true,
+    "Commissioning must be complete after all 6 authorized milestones signed",
+  );
+
+  // 5. Verify physical actuation remains LOCKED even after all 6 signed
+  const actuationAttempt = industrialActuationController.requestActuation({
+    equipmentId: "BESS-INV-01",
+    equipmentType: "BESS_INVERTER",
+    targetSetpointMW: 50.0,
+    operatorId: "CHIEF_ELECTRICAL_OFFICER",
+  });
+  assert(
+    actuationAttempt.accepted === false,
+    "Physical actuation must remain locked even with all 6 signed",
+  );
+  assert(
+    actuationAttempt.executionMode === "PHYSICAL_ACTUATION_LOCKED",
+    "Execution mode must remain PHYSICAL_ACTUATION_LOCKED",
+  );
+
+  testResults.push({
+    name: "Test 32: Cryptographic Engineering Authority Sign-Off & Forgery Rejection",
+    passed: true,
+    details:
+      "Verified cryptographic authority registry: Rejected unregistered engineers, unauthorized milestone jurisdictions, and forged HMAC keys. Confirmed all 6 authorized engineering sign-offs, and verified physical equipment actuation remains permanently locked in simulation mode.",
+  });
+}
+
+// ============================================================================
+// TEST 33: Adversarial Optimization Stress Suite: Ramp Traps & Certified Bounds
+// ============================================================================
+function testAdversarialOptimizationStressSuite() {
+  const H = 24;
+  // 1. Adversarial Ramp Trap: Sudden 450 MW demand jump in 1 hour with offline generator
+  const rampTrapDemand = [
+    100, 100, 100, 550, 550, 550, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100,
+    100, 100, 100, 100, 100,
+  ];
+  const rampTrapInput: HorizonDispatchInput = {
+    horizonHours: H,
+    hourlyDemandMW: rampTrapDemand,
+    hourlySolarAvailableMW: new Array(H).fill(0),
+    hourlyWindAvailableMW: new Array(H).fill(0),
+    hourlyTariffTier: new Array(H).fill("Peak"),
+    initialBatterySOC: 15, // Empty battery, cannot discharge
+    initialCaptiveMW: 50,
+    initialGeneratorMW: 0,
+    initialGeneratorCommitted: false,
+    constraints: {
+      ...DEFAULT_CONSTRAINTS,
+      gridContractDemandMW: 150, // Grid capped at 150 MW
+      gridMaxImportMW: 150, // Substation physical import limit 150 MW
+      captiveMaxMW: 150,
+      captiveRampRateMWPerMin: 1.0, // 60 MW/h max captive ramp
+      generatorMaxMW: 100,
+      generatorRampRateMWPerMin: 1.0, // 60 MW/h max generator ramp
+    },
+  };
+
+  const rampTrapResult = solveHorizonDispatch(rampTrapInput);
+  assert(
+    rampTrapResult.solverStatus === "INFEASIBLE_DEFICIT",
+    `Adversarial ramp trap must declare INFEASIBLE_DEFICIT, got ${rampTrapResult.solverStatus}`,
+  );
+  assert(rampTrapResult.isExecutablePlan === false, "Must block execution on ramp trap");
+  assert(rampTrapResult.intervals.length === 0, "No dispatch intervals must be proposed");
+  assert(
+    rampTrapResult.unservedEnergyMWh > 0,
+    "Unserved energy deficit must be accurately recorded",
+  );
+
+  // 2. Extreme Price Surge Stress: Grid tariff surges to ₹150/kWh during peak hours
+  const surgeTiers: ("Peak" | "Shoulder" | "OffPeak")[] = new Array(H).fill("OffPeak");
+  surgeTiers[18] = "Peak";
+  surgeTiers[19] = "Peak";
+  surgeTiers[20] = "Peak";
+
+  const surgeInput: HorizonDispatchInput = {
+    horizonHours: H,
+    hourlyDemandMW: new Array(H).fill(380),
+    hourlySolarAvailableMW: new Array(H).fill(80),
+    hourlyWindAvailableMW: new Array(H).fill(50),
+    hourlyTariffTier: surgeTiers,
+    initialBatterySOC: 70,
+  };
+  const surgeResult = solveHorizonDispatch(surgeInput);
+  assert(
+    surgeResult.solverStatus === "PROVEN_GLOBAL_OPTIMAL",
+    "Surge scenario must solve to proven global optimal",
+  );
+
+  // 3. Full-Horizon Optimality Certification on Surge Scenario
+  const certificate = certify24HourGlobalOptimality(surgeInput, surgeResult.totalHorizonCost);
+  assert(
+    certificate.isCertifiedGloballyOptimal === true,
+    `Optimality certificate must be verified: ${certificate.certificateSummary}`,
+  );
+  assert(
+    certificate.dualityGapPercent <= 0.05,
+    `Certified duality gap must be <= 0.05%, got ${certificate.dualityGapPercent.toFixed(4)}%`,
+  );
+
+  testResults.push({
+    name: "Test 33: Adversarial Optimization Stress Suite (Ramp Traps, Price Surges & Certified Bounds)",
+    passed: true,
+    details: `Successfully isolated adversarial ramp deficit (isolated unserved capacity deficit without proposing hazardous setpoints), solved extreme tariff surge within certified bounds, and produced a mathematically validated global optimality certificate (duality gap = ${certificate.dualityGapPercent.toFixed(4)}%).`,
   });
 }
 
@@ -2307,6 +2688,10 @@ export async function runAllOptimizerTests() {
   testRevenueMeterIngestionAndIPMVPVerification();
   await testDurablePersistentLedgerStorage();
   testSCADACommissioningGateAndActuationLockout();
+  await testDurableStorageRestartRecoveryAndTamperDetection();
+  testStrictRevenueMeterSecurityAndValidation();
+  testCryptographicEngineeringSignoffAndForgeryRejection();
+  testAdversarialOptimizationStressSuite();
 
   let allPassed = true;
   for (const t of testResults) {
