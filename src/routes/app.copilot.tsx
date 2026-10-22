@@ -1,11 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Send,
-  Sparkles,
-  Mic,
-} from "lucide-react";
+import { Send, Sparkles, Mic } from "lucide-react";
 import { useEnergyState } from "@/context/EnergyContext";
 import { ExplainableCard } from "@/components/ExplainableCard";
 import { smartRecommendations } from "@/lib/intel";

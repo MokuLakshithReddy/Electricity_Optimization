@@ -39,9 +39,7 @@ export interface EnergyLedgerRecord {
   verifiedSavingsRupees: number;
   isRevenueMeterVerified: boolean;
   measurementAndVerificationStatus:
-    | "PRE_COMMISSIONING_SIMULATION"
-    | "IPMVP_OPTION_C_VERIFIED"
-    | "CALIBRATED_SUBMETER_AUDITED";
+    "PRE_COMMISSIONING_SIMULATION" | "IPMVP_OPTION_C_VERIFIED" | "CALIBRATED_SUBMETER_AUDITED";
   sourceTelemetryType?: "SIMULATION" | "FIELD_REVENUE_METER_CALIBRATED";
   co2EmissionsTonnes: number;
   baselineCO2Tonnes: number;
@@ -923,7 +921,11 @@ export class DurablePersistentLedgerStore {
     error?: string;
   }> {
     if (typeof window !== "undefined") {
-      return { isConfigured: false, isHealthy: false, error: "Database check requires server runtime" };
+      return {
+        isConfigured: false,
+        isHealthy: false,
+        error: "Database check requires server runtime",
+      };
     }
     try {
       const { checkSupabaseHealth } = await import("./dbLedgerStore.server");
@@ -1133,7 +1135,8 @@ export class DurablePersistentLedgerStore {
         const { appendLedgerBlockToSupabase } = await import("./dbLedgerStore.server");
         await appendLedgerBlockToSupabase(record);
         isActuallyPersisted = true;
-        storageDetails = "Durable PostgreSQL write confirmed via Supabase service-role RPC function";
+        storageDetails =
+          "Durable PostgreSQL write confirmed via Supabase service-role RPC function";
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(`Database Persistence Failure: ${msg}`);
@@ -1528,16 +1531,26 @@ export class RevenueMeterTelemetryIngestor {
       }
     }
 
-    const certRecord = CalibrationAuthorityRegistry.getCertificate(packet.calibrationCertificateNumber);
+    const certRecord = CalibrationAuthorityRegistry.getCertificate(
+      packet.calibrationCertificateNumber,
+    );
     if (!certRecord) {
-      errors.push(`UNREGISTERED_CALIBRATION_CERTIFICATE: Certificate '${packet.calibrationCertificateNumber}' is not recorded.`);
+      errors.push(
+        `UNREGISTERED_CALIBRATION_CERTIFICATE: Certificate '${packet.calibrationCertificateNumber}' is not recorded.`,
+      );
     } else {
-      const revStatus = CalibrationAuthorityRegistry.isCertificateRevoked(packet.calibrationCertificateNumber);
+      const revStatus = CalibrationAuthorityRegistry.isCertificateRevoked(
+        packet.calibrationCertificateNumber,
+      );
       if (revStatus.isRevoked) {
-        errors.push(`REVOKED_CALIBRATION_CERTIFICATE: Certificate '${packet.calibrationCertificateNumber}' was revoked. Reason: ${revStatus.reason || "Unspecified"}.`);
+        errors.push(
+          `REVOKED_CALIBRATION_CERTIFICATE: Certificate '${packet.calibrationCertificateNumber}' was revoked. Reason: ${revStatus.reason || "Unspecified"}.`,
+        );
       }
       if (certRecord.expandedUncertaintyPercent > 0.2) {
-        errors.push(`ACCURACY_CLASS_VIOLATION: Calibration uncertainty ${certRecord.expandedUncertaintyPercent}% exceeds 0.20% ceiling.`);
+        errors.push(
+          `ACCURACY_CLASS_VIOLATION: Calibration uncertainty ${certRecord.expandedUncertaintyPercent}% exceeds 0.20% ceiling.`,
+        );
       }
     }
 
@@ -1546,12 +1559,16 @@ export class RevenueMeterTelemetryIngestor {
       const clockSkewSeconds = Math.abs(options.referenceClockMs - tsMs) / 1000;
       const maxDrift = options.maxAllowableDriftSeconds ?? 300;
       if (clockSkewSeconds > maxDrift) {
-        errors.push(`CLOCK_DRIFT_EXCEEDED: Timestamp ${packet.timestampISO} deviates from reference by ${clockSkewSeconds}s.`);
+        errors.push(
+          `CLOCK_DRIFT_EXCEEDED: Timestamp ${packet.timestampISO} deviates from reference by ${clockSkewSeconds}s.`,
+        );
       }
     }
 
     if (packet.gridFrequencyHz < 49.0 || packet.gridFrequencyHz > 51.0) {
-      errors.push(`Severe grid frequency deviation: ${packet.gridFrequencyHz} Hz is outside CEA operational band [49.0, 51.0] Hz`);
+      errors.push(
+        `Severe grid frequency deviation: ${packet.gridFrequencyHz} Hz is outside CEA operational band [49.0, 51.0] Hz`,
+      );
     }
 
     if (errors.length > 0) {

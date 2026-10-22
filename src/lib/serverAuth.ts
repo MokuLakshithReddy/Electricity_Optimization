@@ -68,7 +68,9 @@ const SESSION_COOKIE_NAME = "intelligrid_session_cookie";
 function getSigningSecret(): string {
   const secret = process.env["SESSION_SECRET"] || process.env["SERVER_HMAC_SECRET"];
   if (!secret) {
-    throw new Error("SERVER_SECURITY_ERROR: Missing required SESSION_SECRET or SERVER_HMAC_SECRET environment variable.");
+    throw new Error(
+      "SERVER_SECURITY_ERROR: Missing required SESSION_SECRET or SERVER_HMAC_SECRET environment variable.",
+    );
   }
   return secret;
 }
@@ -130,7 +132,9 @@ function createSignedToken(user: UserProfile, expiresAt: number): string {
   return `${base64Payload}.${signature}`;
 }
 
-export function verifyServerSessionToken(token: string | null | undefined): SessionVerificationResult {
+export function verifyServerSessionToken(
+  token: string | null | undefined,
+): SessionVerificationResult {
   if (!token || typeof token !== "string") {
     return { valid: false, user: null, error: "No session token provided" };
   }

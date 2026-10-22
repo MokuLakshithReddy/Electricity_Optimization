@@ -22,10 +22,16 @@ function scrubPii(event: Sentry.Event): Sentry.Event {
 }
 
 const sentryDsn = process.env["SENTRY_DSN"] || process.env["VITE_SENTRY_DSN"];
+type SentryModule = {
+  init?: (options: { dsn: string; beforeSend: typeof scrubPii; tracesSampleRate: number }) => void;
+  captureException?: (error: unknown) => void;
+};
+const sentryModule = Sentry as unknown as SentryModule;
+
 if (sentryDsn) {
   try {
-    if (typeof (Sentry as any).init === "function") {
-      (Sentry as any).init({
+    if (typeof sentryModule.init === "function") {
+      sentryModule.init({
         dsn: sentryDsn,
         beforeSend: scrubPii,
         tracesSampleRate: 0.1,
@@ -43,8 +49,8 @@ function record(error: unknown) {
   lastCapturedError = { error, at: Date.now() };
   if (sentryDsn && error) {
     try {
-      if (typeof (Sentry as any).captureException === "function") {
-        (Sentry as any).captureException(error);
+      if (typeof sentryModule.captureException === "function") {
+        sentryModule.captureException(error);
       }
     } catch {
       // Sentry capture fail-safe

@@ -341,7 +341,9 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
               disabled={isAuthorizing}
               className="rounded-2xl bg-[#1B4D3E] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#133E32] disabled:opacity-50 transition-all shadow-md cursor-pointer"
             >
-              {isAuthorizing ? "Authorizing with Server..." : "Authorize Dispatch (Actuation Locked)"}
+              {isAuthorizing
+                ? "Authorizing with Server..."
+                : "Authorize Dispatch (Actuation Locked)"}
             </button>
           </div>
         </div>

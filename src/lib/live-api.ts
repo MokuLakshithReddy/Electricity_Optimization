@@ -28,11 +28,7 @@ const DEFAULT_LON = 75.7873;
 const DEFAULT_LOCATION_NAME = "Jaipur Industrial Corridor, IN";
 
 // Admin-configured allowlist for SSRF prevention
-const ALLOWED_HOSTS = new Set([
-  "api.open-meteo.com",
-  "open-meteo.com",
-  "api.intelligrid.internal",
-]);
+const ALLOWED_HOSTS = new Set(["api.open-meteo.com", "open-meteo.com", "api.intelligrid.internal"]);
 
 // Private/Link-local IP patterns to block
 const PRIVATE_IP_PATTERNS = [
@@ -49,18 +45,27 @@ export function isUrlAllowedForIngest(urlStr: string): { isAllowed: boolean; rea
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol !== "https:") {
-      return { isAllowed: false, reason: "Only HTTPS endpoints are permitted for external API ingest." };
+      return {
+        isAllowed: false,
+        reason: "Only HTTPS endpoints are permitted for external API ingest.",
+      };
     }
 
     const hostname = parsed.hostname.toLowerCase();
     for (const pattern of PRIVATE_IP_PATTERNS) {
       if (pattern.test(hostname)) {
-        return { isAllowed: false, reason: `Private/local host '${hostname}' is strictly blocked for SSRF protection.` };
+        return {
+          isAllowed: false,
+          reason: `Private/local host '${hostname}' is strictly blocked for SSRF protection.`,
+        };
       }
     }
 
     if (!ALLOWED_HOSTS.has(hostname)) {
-      return { isAllowed: false, reason: `Hostname '${hostname}' is not in the admin allowlist [${Array.from(ALLOWED_HOSTS).join(", ")}].` };
+      return {
+        isAllowed: false,
+        reason: `Hostname '${hostname}' is not in the admin allowlist [${Array.from(ALLOWED_HOSTS).join(", ")}].`,
+      };
     }
 
     return { isAllowed: true };

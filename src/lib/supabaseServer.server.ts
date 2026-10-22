@@ -2,6 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { getCookies, setCookie, deleteCookie } from "@tanstack/react-start/server";
 export { getSupabaseServiceClient } from "./supabaseService";
 
+type SetCookieOptions = Parameters<typeof setCookie>[2];
+type DeleteCookieOptions = Parameters<typeof deleteCookie>[1];
+
 export function getSupabaseServerClient() {
   const supabaseUrl =
     process.env["SUPABASE_URL"] ||
@@ -29,9 +32,9 @@ export function getSupabaseServerClient() {
         try {
           for (const { name, value, options } of cookiesToSet) {
             if (!value) {
-              deleteCookie(name, options as any);
+              deleteCookie(name, options as DeleteCookieOptions);
             } else {
-              setCookie(name, value, options as any);
+              setCookie(name, value, options as SetCookieOptions);
             }
           }
         } catch {

@@ -1,9 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  verifyServerSessionToken,
-  ROLE_PERMISSIONS,
-  UserProfile,
-} from "../lib/serverAuth";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { verifyServerSessionToken, ROLE_PERMISSIONS, UserProfile } from "../lib/serverAuth";
 import { durableLedgerStore, DurablePersistentLedgerStore } from "../lib/energyLedger";
 import { z } from "zod";
 
@@ -26,6 +22,20 @@ const authorizeDispatchSchema = z.object({
 });
 
 describe("IntelliGrid AI — Auth, Server Functions & Ledger Suite", () => {
+  const originalSessionSecret = process.env["SESSION_SECRET"];
+
+  beforeAll(() => {
+    process.env["SESSION_SECRET"] = "test-session-secret";
+  });
+
+  afterAll(() => {
+    if (originalSessionSecret === undefined) {
+      delete process.env["SESSION_SECRET"];
+      return;
+    }
+    process.env["SESSION_SECRET"] = originalSessionSecret;
+  });
+
   it("verifies session token cryptographic validity and server permissions", () => {
     const mockUser: UserProfile = {
       id: "usr_test_01",
