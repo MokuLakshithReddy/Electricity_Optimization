@@ -1,14 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+
+const getHealthStatus = createServerFn({ method: "GET" }).handler(async () => {
+  return { status: "ok", timestamp: new Date().toISOString() };
+});
 
 export const Route = createFileRoute("/health")({
-  server: {
-    handlers: {
-      GET: () => {
-        return new Response(JSON.stringify({ status: "ok" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
-    },
-  },
+  loader: () => getHealthStatus(),
+  component: () => null,
 });

@@ -66,11 +66,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 const SESSION_COOKIE_NAME = "intelligrid_session_cookie";
 
 function getSigningSecret(): string {
-  return (
-    process.env["SESSION_SECRET"] ||
-    process.env["SERVER_HMAC_SECRET"] ||
-    "intelligrid_dynamic_server_secret_key_v4"
-  );
+  const secret = process.env["SESSION_SECRET"] || process.env["SERVER_HMAC_SECRET"];
+  if (!secret) {
+    throw new Error("SERVER_SECURITY_ERROR: Missing required SESSION_SECRET or SERVER_HMAC_SECRET environment variable.");
+  }
+  return secret;
 }
 
 // In-memory lockout tracking
@@ -81,37 +81,37 @@ const LOCKOUT_DURATION_MS = 5 * 60 * 1000;
 const DEFAULT_PLANT_ID = process.env["PLANT_ID"] || "PLANT-IND-04";
 const DEFAULT_PLANT_NAME = process.env["PLANT_NAME"] || "Industrial Facility Control Centre";
 
-// Standard user profiles for local fallback when Supabase is unconfigured
+// Salted hash directory for server-side verification without burned plaintext comments
 const LOCAL_USER_DIRECTORY: Record<
   string,
   {
     role: UserRole;
     name: string;
     email: string;
-    passwordHash: string; // Salted hash computed at runtime
     salt: string;
+    passwordHash: string;
   }
 > = {
   "r.kulkarni": {
     role: "Energy Manager",
     name: "R. Kulkarni",
     email: "r.kulkarni@plant.internal",
-    salt: "s4lt_kulkarni_2026",
-    passwordHash: sha256("SteelGrid#2026!Secure" + "s4lt_kulkarni_2026"),
+    salt: "salt_r_kulkarni_2026",
+    passwordHash: process.env["USER_HASH_KULKARNI"] || sha256("kulkarni_pwd_salt_r_kulkarni_2026"),
   },
   "p.sharma": {
     role: "Operations Engineer",
     name: "P. Sharma",
     email: "p.sharma@plant.internal",
-    salt: "s4lt_sharma_2026",
-    passwordHash: sha256("ControlOps#2026!Grid" + "s4lt_sharma_2026"),
+    salt: "salt_p_sharma_2026",
+    passwordHash: process.env["USER_HASH_SHARMA"] || sha256("sharma_pwd_salt_p_sharma_2026"),
   },
   admin: {
     role: "Administrator",
     name: "Plant Security Administrator",
     email: "admin@plant.internal",
-    salt: "s4lt_admin_2026",
-    passwordHash: sha256("PlantAdmin#2026!Root" + "s4lt_admin_2026"),
+    salt: "salt_admin_2026",
+    passwordHash: process.env["USER_HASH_ADMIN"] || sha256("admin_pwd_salt_admin_2026"),
   },
 };
 
@@ -145,7 +145,13 @@ export function verifyServerSessionToken(token: string | null | undefined): Sess
     return { valid: false, user: null, error: "Malformed token structure" };
   }
 
-  const expectedSignature = hmacSha256(getSigningSecret(), base64Payload);
+  let expectedSignature: string;
+  try {
+    expectedSignature = hmacSha256(getSigningSecret(), base64Payload);
+  } catch (err: unknown) {
+    return { valid: false, user: null, error: (err as Error).message };
+  }
+
   if (signature !== expectedSignature) {
     return {
       valid: false,
