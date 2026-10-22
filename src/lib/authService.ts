@@ -2,8 +2,7 @@
  * IntelliGrid AI - Client Authentication & Authorization Service
  *
  * Production-grade client gateway connected to server-authoritative authentication:
- * - Server-side credential verification with salted SHA-256 hashes (no client passwords)
- * - Server-verified HMAC-SHA256 session tokens
+ * - Server-side credential verification via Supabase Auth & httpOnly cookies
  * - Strictly NO hardcoded default user fallback when unauthenticated
  * - Server-enforced Role-Based Access Control (RBAC)
  * - Equipment dispatch operations must be authorized by server-side gatekeepers
@@ -11,18 +10,21 @@
 
 import {
   serverLogin,
+  serverLogout,
   serverVerifySession,
   serverAuthorizeDispatch,
+  getSessionFn,
   UserProfile,
   UserRole,
   Permission,
   ROLE_PERMISSIONS,
 } from "./serverAuth";
+import { getSupabaseBrowserClient } from "./supabaseBrowser";
 
 export type { UserProfile, UserRole, Permission };
 export { ROLE_PERMISSIONS };
 
-const AUTH_STORAGE_KEY = "intelligrid_session_token_v3";
+const AUTH_STORAGE_KEY = "intelligrid_session_token_v4";
 
 export interface StoredSession {
   token: string;
@@ -41,8 +43,7 @@ export const AVAILABLE_ROLES: UserRole[] = [
 
 export const authService = {
   /**
-   * Log in user via secure server authentication function.
-   * Credentials are verified against server-held salted hashes.
+   * Log in user via server authentication function.
    */
   async login(
     usernameInput: string,
@@ -56,10 +57,10 @@ export const authService = {
         },
       });
 
-      if (result.success && result.token && result.user) {
+      if (result.success && result.user) {
         if (typeof window !== "undefined") {
           const sessionData: StoredSession = {
-            token: result.token,
+            token: result.token || "cookie-authenticated",
             cachedUser: result.user,
             expiresAt: Date.now() + 8 * 3600 * 1000,
           };
@@ -76,7 +77,7 @@ export const authService = {
 
       return {
         success: false,
-        error: result.error || "Authentication failed. Invalid username or passphrase.",
+        error: result.error || "Authentication failed. Invalid credentials.",
       };
     } catch (err: unknown) {
       const message =
@@ -90,9 +91,6 @@ export const authService = {
     }
   },
 
-  /**
-   * Retrieve active session token string from secure storage.
-   */
   getToken(): string | null {
     if (typeof window === "undefined") return null;
     try {
@@ -110,10 +108,6 @@ export const authService = {
     }
   },
 
-  /**
-   * Retrieve current authenticated user profile.
-   * Returns null if unauthenticated. (NO DEFAULT MOCK USER FALLBACK).
-   */
   getCurrentUser(): UserProfile | null {
     if (typeof window === "undefined") return null;
     try {
@@ -131,21 +125,28 @@ export const authService = {
     }
   },
 
-  /**
-   * Check whether an active session exists and is unexpired.
-   */
   isAuthenticated(): boolean {
     return this.getCurrentUser() !== null;
   },
 
-  /**
-   * Re-verify session validity directly with the server.
-   */
   async verifySessionWithServer(): Promise<{ valid: boolean; user: UserProfile | null }> {
-    const token = this.getToken();
-    if (!token) return { valid: false, user: null };
-
     try {
+      const session = await getSessionFn();
+      if (session.valid && session.user) {
+        if (typeof window !== "undefined") {
+          const sessionData: StoredSession = {
+            token: "cookie-authenticated",
+            cachedUser: session.user,
+            expiresAt: Date.now() + 8 * 3600 * 1000,
+          };
+          sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionData));
+        }
+        return { valid: true, user: session.user };
+      }
+
+      const token = this.getToken();
+      if (!token) return { valid: false, user: null };
+
       const res = await serverVerifySession({ data: { token } });
       if (!res.valid || !res.user) {
         this.logout();
@@ -157,19 +158,12 @@ export const authService = {
     }
   },
 
-  /**
-   * Verify if current authenticated user holds a specific permission.
-   */
   hasPermission(permission: Permission): boolean {
     const user = this.getCurrentUser();
     if (!user) return false;
     return user.permissions?.includes(permission) ?? false;
   },
 
-  /**
-   * Request server authorization for equipment dispatch.
-   * Equipment operations MUST pass server-verified cryptographic token validation.
-   */
   async authorizeDispatchWithServer(plan: {
     batterySetpointMW: number;
     gridImportSetpointMW: number;
@@ -179,15 +173,11 @@ export const authService = {
     authorized: boolean;
     operatorId?: string;
     authorizationSignature?: string;
+    expiresAt?: string;
+    nonce?: string;
     error?: string;
   }> {
-    const token = this.getToken();
-    if (!token) {
-      return {
-        authorized: false,
-        error: "Authentication required: No active session token found.",
-      };
-    }
+    const token = this.getToken() || undefined;
 
     try {
       return await serverAuthorizeDispatch({
@@ -207,10 +197,14 @@ export const authService = {
     }
   },
 
-  /**
-   * Log out and purge all session credentials from local storage.
-   */
-  logout(): void {
+  async logout(): Promise<void> {
+    try {
+      await serverLogout();
+      const supabase = getSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Safe logout catch
+    }
     if (typeof window !== "undefined") {
       try {
         sessionStorage.removeItem(AUTH_STORAGE_KEY);

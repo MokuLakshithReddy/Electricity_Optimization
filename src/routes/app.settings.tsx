@@ -85,8 +85,8 @@ function SettingsPage() {
             <h2 className="text-sm font-semibold">Company information</h2>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="Company" value="Tata Steel Limited" />
-            <Field label="Plant" value="Jamshedpur Works" />
+            <Field label="Company" value="Industrial Energy Corporation" />
+            <Field label="Plant" value="Main Industrial Works" />
             <Field label="Control centre" value="Energy Control Centre — Block C" />
             <Field label="Contracted demand" value="720 MW" />
           </div>
@@ -190,7 +190,7 @@ function LiveDataSettingsCard() {
   const [apiUrl, setApiUrl] = useState<string>(
     () =>
       localStorage.getItem("intelligrid_custom_api_url") ||
-      "https://api.intelligrid.example.com/v1/telemetry",
+      "https://api.open-meteo.com/v1/forecast",
   );
 
   const handleSelectMode = (newMode: string) => {
@@ -281,7 +281,7 @@ function LiveDataSettingsCard() {
               type="text"
               value={apiUrl}
               onChange={(e) => handleSaveApiUrl(e.target.value)}
-              placeholder="https://api.yourplant.com/v1/telemetry"
+              placeholder="https://api.open-meteo.com/v1/forecast"
               className="mt-1.5 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50"
             />
           </label>

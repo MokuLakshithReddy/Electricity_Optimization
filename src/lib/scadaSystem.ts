@@ -11,7 +11,7 @@
  * edge gateways, physical key permissives, and dual-operator authorization.
  */
 
-import { sha256, hmacSha256 } from "./cryptoUtils";
+import { sha256 } from "./cryptoUtils";
 import * as nodeCrypto from "node:crypto";
 
 export interface SiteValidationMilestone {
@@ -60,11 +60,11 @@ export const SITE_SAFETY_VALIDATION = {
     {
       id: "VAL-SOP-04",
       category: "OPERATIONAL",
-      title: "Steel Complex HAZOP & Safe Operating Procedures (SOP)",
-      requiredAuthority: "VP Operations & Safety Directorate (Tata Steel Jamshedpur)",
+      title: "Industrial Complex HAZOP & Safe Operating Procedures (SOP)",
+      requiredAuthority: "VP Operations & Safety Directorate (Plant Control Centre)",
       status: "PENDING_INDEPENDENT_VALIDATION",
       description:
-        "Emergency power procedures for blast furnace blowers, hot strip mill dynamic load reject mitigation, and emergency load shedding.",
+        "Emergency power procedures for furnace blowers, rolling mill dynamic load reject mitigation, and emergency load shedding.",
     },
     {
       id: "VAL-COM-05",
@@ -178,7 +178,7 @@ export interface DispatchCommand {
 }
 
 /**
- * Synthetic Submetering Registers for Industrial Steel Complex Model
+ * Synthetic Submetering Registers for Industrial Complex Model
  */
 export const SUBMETERS: SubmeterRegister[] = [
   {
@@ -197,8 +197,8 @@ export const SUBMETERS: SubmeterRegister[] = [
   },
   {
     meterId: "MTR-BF1-33KV",
-    name: "Blast Furnace #1 Blower Station (Digital Twin)",
-    location: "Ironmaking Substation B",
+    name: "Smelting & Furnace Blower Station (Digital Twin)",
+    location: "Primary Substation B",
     activePowerMW: 92.4,
     reactivePowerMVAR: 22.1,
     apparentPowerMVA: 95.0,
@@ -211,7 +211,7 @@ export const SUBMETERS: SubmeterRegister[] = [
   },
   {
     meterId: "MTR-HSM-33KV",
-    name: "Hot Strip Mill Finishing Stands (Digital Twin)",
+    name: "Hot Rolling Mill Finishing Stands (Digital Twin)",
     location: "Rolling Mill Substation 2",
     activePowerMW: 184.6,
     reactivePowerMVAR: 44.8,
@@ -291,7 +291,7 @@ export const GENERATOR_FLEET: GeneratorTelemetry[] = [
   },
   {
     unitId: "GEN-CAP-BLAST",
-    unitName: "Captive Blast Furnace Gas Turbine #1 (Simulation)",
+    unitName: "Captive Gas Turbine #1 (Simulation)",
     status: "RUNNING",
     activePowerMW: 65.4,
     ratedCapacityMW: 95.0,
@@ -429,7 +429,6 @@ export function simulateDispatchExecution(plan: DispatchCommand): {
     };
   }
 
-  // Genuine cryptographic SHA-256 hash over canonical audit tuple
   const canonicalAuditPayload = `${plan.commandId}|${now}|${plan.authorizedBy}|BESS:${plan.batterySetpointMW}|Grid:${plan.gridImportSetpointMW}|Cap:${plan.captiveSetpointMW}|Gen:${plan.generatorSetpointMW}|SIMULATION_ONLY`;
   const cryptographicHash = sha256(canonicalAuditPayload);
 
@@ -452,12 +451,7 @@ export function simulateDispatchExecution(plan: DispatchCommand): {
 
 /**
  * Attempt Physical Equipment Actuation.
- *
- * CRITICAL SAFETY GATEKEEPER:
- * This method categorically intercepts and blocks any attempt to actuate physical equipment.
- * Physical actuation is permanently locked until independent site-specific telemetry calibration,
- * protection relays (IEEE 1547 / IEC 61850), hardware trapped-key permissives, and plant safety SOPs
- * have been verified and certified.
+ * Closed-loop physical actuation pathways are locked at the architecture level.
  */
 export function attemptPhysicalActuation(plan: DispatchCommand): {
   success: false;
@@ -497,11 +491,6 @@ export function attemptPhysicalActuation(plan: DispatchCommand): {
 
 import { z } from "zod";
 
-/**
- * Strict Runtime Zod Command Validation Schema
- * Enforces rigorous type, range, and format contracts between the LP Optimizer output
- * and the SCADA equipment dispatch emitter.
- */
 export const ScadaDispatchSetpointsSchema = z.object({
   solarCurtailmentMW: z.number().min(0).max(200),
   windCurtailmentMW: z.number().min(0).max(150),
@@ -531,11 +520,6 @@ export const ScadaDispatchCommandSchema = z.object({
 
 export type ScadaDispatchCommand = z.infer<typeof ScadaDispatchCommandSchema>;
 
-/**
- * Deadband Filter (0.5 kW / 0.0005 MW threshold)
- * Prevents actuator chatter, excessive PLC register writes, and switchgear mechanical wear
- * by suppressing setpoint changes smaller than the deadband limit.
- */
 export const SCADA_DEADBAND_THRESHOLD_MW = 0.0005; // 0.5 kW
 
 export function applyDeadbandFilter(
@@ -561,7 +545,7 @@ export function applyDeadbandFilter(
   for (const key of checkKeys) {
     const delta = Math.abs(newSetpoints[key] - currentSetpoints[key]);
     if (delta > 0 && delta < deadbandThresholdMW) {
-      filtered[key] = currentSetpoints[key]; // Suppress jitter
+      filtered[key] = currentSetpoints[key];
       suppressedAssets.push(
         `${key} (delta: ${(delta * 1000).toFixed(2)} kW < ${(deadbandThresholdMW * 1000).toFixed(1)} kW)`,
       );
@@ -573,11 +557,6 @@ export function applyDeadbandFilter(
   return { filteredSetpoints: filtered, suppressedAssets, modifiedAssets };
 }
 
-/**
- * Software Watchdog & Stale Telemetry Fail-Safe Demarcation
- * Monitors heartbeat freshness. If telemetry is older than 10 seconds,
- * automated dispatch is strictly locked out and a high-priority operator alarm is raised.
- */
 export class ScadaWatchdogMonitor {
   private lastHeartbeatMs: number = Date.now();
   private lastTelemetryTimestampMs: number = Date.now();
@@ -604,7 +583,6 @@ export class ScadaWatchdogMonitor {
     const staleTelemetrySec = (now - this.lastTelemetryTimestampMs) / 1000;
     const staleHeartbeatSec = (now - this.lastHeartbeatMs) / 1000;
 
-    // Stale telemetry lockout (> 10s)
     if (staleTelemetrySec > this.maxStaleTelemetrySec) {
       this.isReadOnlyFallback = true;
       return {
@@ -615,7 +593,6 @@ export class ScadaWatchdogMonitor {
       };
     }
 
-    // Heartbeat loss
     if (staleHeartbeatSec > this.maxStaleTelemetrySec) {
       this.isSafeIslandMode = true;
       return {
@@ -645,13 +622,6 @@ export class ScadaWatchdogMonitor {
 
 export const scadaWatchdog = new ScadaWatchdogMonitor();
 
-// ============================================================================
-// INDUSTRIAL COMMISSIONING SAFETY GATE & PHYSICAL ACTUATION CONTROLLER
-// ============================================================================
-
-/**
- * Verifies an asymmetric digital signature (Ed25519) against an engineer's SPKI PEM public key.
- */
 export function verifyAsymmetricSignature(
   publicKeyPem: string,
   data: string,
@@ -670,9 +640,6 @@ export function verifyAsymmetricSignature(
   return false;
 }
 
-/**
- * Signs payload using an engineer's PKCS#8 PEM private key (used by authorized signers / hardware tokens).
- */
 export function signAsymmetricPayload(privateKeyPem: string, data: string): string {
   if (nodeCrypto && typeof nodeCrypto.sign === "function") {
     const privKey = nodeCrypto.createPrivateKey(privateKeyPem);
@@ -687,16 +654,11 @@ export interface AuthorizedEngineeringCredential {
   engineerName: string;
   certifyingAuthority: string;
   assignedMilestones: string[];
-  publicKeyPem: string; // Asymmetric Public Key (Ed25519 SPKI PEM) - No private secrets stored
+  publicKeyPem: string;
   certificateFingerprintSha256: string;
   validUntilISO: string;
 }
 
-/**
- * Public Engineering Authority Keyring:
- * Contains ONLY public keys and certificate fingerprints. Zero private secrets are stored in this codebase.
- * Signatures are verified using asymmetric public-key cryptography (Ed25519 / FIPS 186-5).
- */
 export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineeringCredential> = {
   "IEI-PE-94821": {
     licenseId: "IEI-PE-94821",
@@ -734,7 +696,7 @@ export const AUTHORIZED_ENGINEERING_KEYRING: Record<string, AuthorizedEngineerin
   "TSL-SOP-4412": {
     licenseId: "TSL-SOP-4412",
     engineerName: "Er. K. V. Ramanathan",
-    certifyingAuthority: "VP Operations & Safety Directorate (Tata Steel Jamshedpur)",
+    certifyingAuthority: "VP Operations & Safety Directorate (Plant Control Centre)",
     assignedMilestones: ["VAL-SOP-04"],
     publicKeyPem:
       "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAek7XvctDtqoVpKGMA3mXC/XCxAk6a8/gA511OHPqyGI=\n-----END PUBLIC KEY-----",
@@ -829,7 +791,6 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
-    // 1. Look up engineer in Authorized Keyring
     const cred = this.dynamicKeyring.get(professionalLicenseId);
     if (!cred) {
       return {
@@ -839,7 +800,6 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
-    // 2. Verify identity fields match credential registration
     if (cred.engineerName !== engineerName) {
       return {
         success: false,
@@ -856,7 +816,6 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
-    // 3. Verify jurisdictional milestone authorization
     if (!cred.assignedMilestones.includes(milestoneId)) {
       return {
         success: false,
@@ -865,7 +824,6 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
-    // 4. Verify credential expiry
     if (Date.now() > Date.parse(cred.validUntilISO)) {
       return {
         success: false,
@@ -874,7 +832,6 @@ export class IndustrialSafetyCommissioningGate {
       };
     }
 
-    // 5. External Enterprise PKI / CA Root Validation (if configured)
     if (this.externalPkiValidator) {
       const pkiCheck = this.externalPkiValidator(cred);
       if (!pkiCheck.isValid) {
@@ -889,7 +846,6 @@ export class IndustrialSafetyCommissioningGate {
     const effectiveTimestamp = timestampISO || new Date().toISOString();
     const signaturePayload = `${milestoneId}|${engineerName}|${professionalLicenseId}|${certifyingAuthority}|${effectiveTimestamp}|${cred.certificateFingerprintSha256}`;
 
-    // 6. Asymmetric Public-Key Cryptographic Signature Verification (Ed25519)
     const isSignatureValid = verifyAsymmetricSignature(
       cred.publicKeyPem,
       signaturePayload,
@@ -969,7 +925,6 @@ export class IndustrialActuationController {
     const auditPayload = `ACTUATION_REQ|${request.equipmentId}|${request.targetSetpointMW}|${request.operatorId}|${timestamp}`;
     const auditHash = sha256(auditPayload);
 
-    // Rule 1: Equipment actuation must remain disabled by default in simulation / pre-commissioning
     if (!SITE_SAFETY_VALIDATION.isPhysicalActuationPermitted) {
       return {
         accepted: false,
@@ -980,7 +935,6 @@ export class IndustrialActuationController {
       };
     }
 
-    // Rule 2: All 6 commissioning milestones must be cryptographically signed
     if (!industrialCommissioningGate.isCommissioningComplete()) {
       return {
         accepted: false,
@@ -990,7 +944,6 @@ export class IndustrialActuationController {
       };
     }
 
-    // Rule 3: Hardwired trapped-key (Castell) permissive must be engaged
     if (!this.isCastellKeyPermissiveEngaged && !request.interlockPermissiveKeysEngaged) {
       return {
         accepted: false,
@@ -1001,7 +954,6 @@ export class IndustrialActuationController {
       };
     }
 
-    // Rule 4: Watchdog health
     const watchdogStatus = scadaWatchdog.canDispatch();
     if (!watchdogStatus.allowed) {
       return {
@@ -1025,7 +977,7 @@ export const industrialActuationController = new IndustrialActuationController()
 export const HISTORICAL_CREDENTIAL_ROTATION_AUDIT = {
   gitHistoryVerificationStatus: "VERIFIED_SYNTHETIC_DEVELOPMENT_MOCKS" as const,
   details:
-    "All symmetric credentials committed in historical repository revisions prior to commit e32f57b were verified as synthetic development mock strings (e.g. MOCK_TEST_SECRET_01_IEI_2026) and were never provisioned or deployed across any physical substation, RTU, or plant environment. Rotating these test strings was accomplished by complete removal and replacement with asymmetric public keys.",
+    "All symmetric credentials committed in historical repository revisions prior to commit e32f57b were verified as synthetic development mock strings and were never provisioned or deployed across any physical substation, RTU, or plant environment. Rotating these test strings was accomplished by complete removal and replacement with asymmetric public keys.",
   productionKeyManagementRequirement:
     "For production deployment, code-defined public keyrings must be superseded by external enterprise PKI (X.509 CA chain) or HSM-backed PKCS#11 / KMS modules (AWS KMS, Azure Key Vault, HashiCorp Vault). Physical actuation remains permanently locked (isPhysicalActuationPermitted: false) in code.",
 };

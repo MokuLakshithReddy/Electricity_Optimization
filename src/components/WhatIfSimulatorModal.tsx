@@ -2,6 +2,8 @@ import { useState } from "react";
 import { X, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEnergyState } from "@/context/EnergyContext";
+import { authService } from "@/lib/authService";
+import { toast } from "sonner";
 
 interface WhatIfSimulatorModalProps {
   isOpen: boolean;
@@ -19,7 +21,9 @@ export type ScenarioPreset =
 
 export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalProps) {
   const [activeScenario, setActiveScenario] = useState<ScenarioPreset>("battery_failure");
-  const { runSimulationScenario, resetToBaseline } = useEnergyState();
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const { runSimulationScenario, resetToBaseline, batteryMW, gridMW, captiveMW, generatorMW } =
+    useEnergyState();
 
   if (!isOpen) return null;
 
@@ -55,6 +59,31 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
   const handleSelectScenario = (id: ScenarioPreset) => {
     setActiveScenario(id);
     runSimulationScenario(id);
+  };
+
+  const handleSimulateWithServerAuth = async () => {
+    setIsAuthorizing(true);
+    try {
+      const res = await authService.authorizeDispatchWithServer({
+        batterySetpointMW: Math.min(90, Math.max(0, batteryMW)),
+        gridImportSetpointMW: Math.min(250, Math.max(0, gridMW)),
+        captiveSetpointMW: Math.min(95, Math.max(30, captiveMW || 55)),
+        generatorSetpointMW: Math.min(120, Math.max(0, generatorMW)),
+      });
+
+      if (res.authorized) {
+        toast.success(
+          `Server Authorization Signature: 0x${res.authorizationSignature?.slice(0, 12)}... (Physical Actuation Locked)`,
+        );
+      } else {
+        toast.error(`Server Gatekeeper: ${res.error || "Authorization declined."}`);
+      }
+    } catch {
+      toast.error("Failed to connect to server authorization function.");
+    } finally {
+      setIsAuthorizing(false);
+      onClose();
+    }
   };
 
   const getResults = () => {
@@ -308,12 +337,11 @@ export function WhatIfSimulatorModal({ isOpen, onClose }: WhatIfSimulatorModalPr
               Close
             </button>
             <button
-              onClick={() => {
-                onClose();
-              }}
-              className="rounded-2xl bg-[#1B4D3E] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#133E32] transition-all shadow-md cursor-pointer"
+              onClick={handleSimulateWithServerAuth}
+              disabled={isAuthorizing}
+              className="rounded-2xl bg-[#1B4D3E] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#133E32] disabled:opacity-50 transition-all shadow-md cursor-pointer"
             >
-              Simulate in Sandbox (Actuation Locked)
+              {isAuthorizing ? "Authorizing with Server..." : "Authorize Dispatch (Actuation Locked)"}
             </button>
           </div>
         </div>

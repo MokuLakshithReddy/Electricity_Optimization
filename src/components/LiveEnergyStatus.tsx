@@ -22,7 +22,6 @@ export function LiveEnergyStatus({
   const captivePct = Number(((energyState.captiveMW / demand) * 100).toFixed(0));
   const genPct = Number(((energyState.generatorMW / demand) * 100).toFixed(0));
 
-  // Semi-circle SVG gauge calculation
   const radius = 70;
   const circumference = Math.PI * radius;
   const strokeDashoffset =
@@ -45,7 +44,6 @@ export function LiveEnergyStatus({
       {/* Semicircular Radial Gauge */}
       <div className="relative flex flex-col items-center justify-center my-2">
         <svg className="w-48 h-28 overflow-visible" viewBox="0 0 160 90">
-          {/* Background Track Arc */}
           <path
             d="M 10 80 A 70 70 0 0 1 150 80"
             fill="none"
@@ -53,7 +51,6 @@ export function LiveEnergyStatus({
             strokeWidth="14"
             strokeLinecap="round"
           />
-          {/* Active Progress Arc */}
           <path
             d="M 10 80 A 70 70 0 0 1 150 80"
             fill="none"
@@ -73,15 +70,15 @@ export function LiveEnergyStatus({
           </defs>
         </svg>
 
-        {/* Center Text inside Arc */}
         <div className="absolute top-10 flex flex-col items-center text-center">
           <span className="font-display text-3xl font-extrabold text-[#1F2937] leading-none">
             {demandMW} <span className="text-base font-semibold text-[#6B7280]">MW</span>
           </span>
-          <span className="text-[11px] font-medium text-[#6B7280] mt-1">Current Demand</span>
+          <span className="text-[11px] font-semibold text-[#6B7280] mt-1">
+            Model-Estimated Demand
+          </span>
         </div>
 
-        {/* Status Badge below Gauge */}
         <div
           className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${energyState.reliability < 99.0 ? "bg-rose-50 text-rose-800 border-rose-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"}`}
         >

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as HealthRouteImport } from './routes/health'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppCarbonRouteImport } from './routes/app.carbon'
 import { Route as AppCopilotRouteImport } from './routes/app.copilot'
@@ -22,6 +23,7 @@ import { Route as AppForecastsRouteImport } from './routes/app.forecasts'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppScenariosRouteImport } from './routes/app.scenarios'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
+import { Route as HealthDbRouteImport } from './routes/health.db'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -31,6 +33,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HealthRoute = HealthRouteImport.update({
+  id: '/health',
+  path: '/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -88,10 +95,16 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const HealthDbRoute = HealthDbRouteImport.update({
+  id: '/db',
+  path: '/db',
+  getParentRoute: () => HealthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/health': typeof HealthRouteWithChildren
   '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
@@ -102,10 +115,12 @@ export interface FileRoutesByFullPath {
   '/app/reports': typeof AppReportsRoute
   '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
+  '/health/db': typeof HealthDbRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/health': typeof HealthRouteWithChildren
   '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
@@ -116,12 +131,14 @@ export interface FileRoutesByTo {
   '/app/reports': typeof AppReportsRoute
   '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
+  '/health/db': typeof HealthDbRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/health': typeof HealthRouteWithChildren
   '/app/carbon': typeof AppCarbonRoute
   '/app/copilot': typeof AppCopilotRoute
   '/app/dashboard': typeof AppDashboardRoute
@@ -132,6 +149,7 @@ export interface FileRoutesById {
   '/app/reports': typeof AppReportsRoute
   '/app/scenarios': typeof AppScenariosRoute
   '/app/settings': typeof AppSettingsRoute
+  '/health/db': typeof HealthDbRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -139,6 +157,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/health'
     | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
@@ -149,10 +168,12 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/scenarios'
     | '/app/settings'
+    | '/health/db'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/health'
     | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
@@ -163,11 +184,13 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/scenarios'
     | '/app/settings'
+    | '/health/db'
     | '/app'
   id:
     | '__root__'
     | '/'
     | '/app'
+    | '/health'
     | '/app/carbon'
     | '/app/copilot'
     | '/app/dashboard'
@@ -178,12 +201,14 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/scenarios'
     | '/app/settings'
+    | '/health/db'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  HealthRoute: typeof HealthRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -200,6 +225,13 @@ declare module '@tanstack/react-router' {
       path: '/app'
       fullPath: '/app'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/health': {
+      id: '/health'
+      path: '/health'
+      fullPath: '/health'
+      preLoaderRoute: typeof HealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -279,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/health/db': {
+      id: '/health/db'
+      path: '/db'
+      fullPath: '/health/db'
+      preLoaderRoute: typeof HealthDbRouteImport
+      parentRoute: typeof HealthRoute
+    }
   }
 }
 
@@ -312,9 +351,21 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface HealthRouteChildren {
+  HealthDbRoute: typeof HealthDbRoute
+}
+
+const HealthRouteChildren: HealthRouteChildren = {
+  HealthDbRoute: HealthDbRoute,
+}
+
+const HealthRouteWithChildren =
+  HealthRoute._addFileChildren(HealthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  HealthRoute: HealthRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

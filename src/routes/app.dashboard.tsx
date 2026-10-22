@@ -22,7 +22,7 @@ export const Route = createFileRoute("/app/dashboard")({
       {
         name: "description",
         content:
-          "Optimize energy. Protect production. AI-powered industrial energy orchestration for Tata Steel control rooms.",
+          "Optimize energy. Protect production. AI-powered industrial energy orchestration for control rooms.",
       },
       { property: "og:title", content: "IntelliGrid AI — Energy Control Dashboard" },
       {
@@ -43,7 +43,6 @@ function DashboardContent() {
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [scadaOpen, setScadaOpen] = useState(false);
 
-  // Dynamic KPI data bound directly to live central EnergyContext state
   const dynamicKpis: KpiCardData[] = [
     {
       id: "cost-saved",
@@ -134,53 +133,41 @@ function DashboardContent() {
         </button>
       </div>
 
-      {/* Main Grid: Left/Center Analytics (2 cols on xl) + Right Insights (1 col on xl) */}
+      {/* Main Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start min-w-0">
-        {/* CENTER / MAIN CONTENT AREA */}
         <div className="xl:col-span-2 space-y-6 min-w-0">
-          {/* 2. Responsive 4-Column KPI Cards Grid (Equal height, no text overflow, minmax 0) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
             {dynamicKpis.map((kpi) => (
               <KpiCard key={kpi.id} data={kpi} />
             ))}
           </div>
 
-          {/* 3. Main Forecast Chart Card */}
           <ForecastChart onSimulateClick={() => setSimulatorOpen(true)} />
 
-          {/* 4. Horizontal AI Recommendation Card */}
           <AIRecommendation
             onViewOptimization={() => navigate({ to: "/app/scenarios" })}
             onSimulate={() => setSimulatorOpen(true)}
           />
 
-          {/* 5. Current Energy Mix Section */}
           <SourceMixSection onSelectSource={() => navigate({ to: "/app/energy-flow" })} />
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="space-y-6 min-w-0">
-          {/* 6. Live Energy Status & Radial Gauge */}
           <LiveEnergyStatus
             demandMW={energyState.totalDemandMW}
             systemStatus={energyState.reliabilityStatus}
           />
 
-          {/* 7. Energy Cost Forecast Card */}
           <CostForecastCard />
 
-          {/* 8. Upcoming AI Decisions Schedule */}
           <UpcomingDecisions onViewAll={() => navigate({ to: "/app/scenarios" })} />
         </div>
       </div>
 
-      {/* 9. Full-Width Bottom Impact Section Banner */}
       <ImpactSummary onViewImpactReport={() => navigate({ to: "/app/reports" })} />
 
-      {/* Interactive What-If Simulator Modal */}
       <WhatIfSimulatorModal isOpen={simulatorOpen} onClose={() => setSimulatorOpen(false)} />
 
-      {/* Industrial SCADA & Equipment Interlocks Modal */}
       <ScadaModal isOpen={scadaOpen} onClose={() => setScadaOpen(false)} />
     </div>
   );

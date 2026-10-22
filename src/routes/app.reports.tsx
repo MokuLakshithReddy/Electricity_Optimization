@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   Info,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,6 +19,7 @@ import {
   exportLedgerToCsv,
   buildHistoricalLedger,
   verifyLedgerCryptographicIntegrity,
+  IS_DEMO_MODE,
 } from "@/lib/energyLedger";
 import {
   Bar,
@@ -31,7 +33,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useEnergyState } from "@/context/EnergyContext";
 
 export const Route = createFileRoute("/app/reports")({
   head: () => ({
@@ -45,7 +46,7 @@ export const Route = createFileRoute("/app/reports")({
       { property: "og:title", content: "Energy Reports — IntelliGrid AI" },
       {
         property: "og:description",
-        content: "Board-ready energy and sustainability reporting for Tata Steel.",
+        content: "Board-ready energy and sustainability reporting for industrial plants.",
       },
     ],
   }),
@@ -61,9 +62,7 @@ export function ReportsPage() {
     blocks: number;
     isValid: boolean;
   } | null>(null);
-  const energyState = useEnergyState();
 
-  // Query historical energy ledger dynamically based on selected period
   const ledgerData = useMemo(() => queryLedgerReport(period), [period]);
 
   const reportMetrics = useMemo(
@@ -86,7 +85,6 @@ export function ReportsPage() {
     [ledgerData],
   );
 
-  // Cryptographic Ledger Verification Action
   const handleVerifyLedger = () => {
     const fullLedger = buildHistoricalLedger();
     const res = verifyLedgerCryptographicIntegrity(fullLedger);
@@ -101,7 +99,6 @@ export function ReportsPage() {
     }
   };
 
-  // CSV Ledger Audit Export Action
   const handleExportCSV = () => {
     const csvContent = exportLedgerToCsv(72);
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -115,7 +112,6 @@ export function ReportsPage() {
     toast.success("Cryptographically signed interval energy ledger exported to CSV.");
   };
 
-  // PDF Export Action
   const handleExportPDF = () => {
     const reportTitle = `${period} Energy & Sustainability Audit Report`;
     const genTime = new Date().toLocaleString("en-IN", {
@@ -142,24 +138,13 @@ export function ReportsPage() {
         </head>
         <body>
           <h1>INTELLIGRID AI — ${reportTitle.toUpperCase()}</h1>
-          <p class="sub">Plant: Tata Steel Jamshedpur Works · Generated: ${genTime} · Period: ${period}</p>
+          <p class="sub">Plant: Primary Industrial Complex · Generated: ${genTime} · Period: ${period} · Provenance: SIMULATION</p>
 
           <div class="grid">
             <div class="card"><label>Energy Consumed</label><val>${reportMetrics.consumed} ${reportMetrics.consumedUnit}</val></div>
             <div class="card"><label>Electricity Cost</label><val>${reportMetrics.cost}</val></div>
             <div class="card"><label>Carbon Emissions</label><val>${reportMetrics.emissions} ${reportMetrics.emissionsUnit}</val></div>
             <div class="card"><label>Modeled Savings</label><val>${reportMetrics.savings}</val></div>
-          </div>
-
-          <div class="grid">
-            <div class="card"><label>Renewable Share</label><val>${reportMetrics.renewablePct}</val></div>
-            <div class="card"><label>Power Reliability</label><val>${reportMetrics.reliability}</val></div>
-            <div class="card"><label>Grid Dependency</label><val>${reportMetrics.gridPct}</val></div>
-            <div class="card"><label>Battery Utilization</label><val>${reportMetrics.bessPct}</val></div>
-          </div>
-
-          <div style="margin-top: 14px; padding: 10px 14px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; font-size: 11px; color: #92400E;">
-            <strong>M&V Demarcation Notice:</strong> Savings figures reflect modeled optimization against operating baseline. Field-verified savings require post-commissioning IPMVP Option C utility billing reconciliation.
           </div>
 
           <h3>Ledger Breakdown</h3>
@@ -172,6 +157,7 @@ export function ReportsPage() {
                 <th>CO₂ Emissions</th>
                 <th>Renewable %</th>
                 <th>Modeled Savings</th>
+                <th>Provenance</th>
               </tr>
             </thead>
             <tbody>
@@ -185,6 +171,7 @@ export function ReportsPage() {
                   <td>${row.co2} t</td>
                   <td>${row.renewable}</td>
                   <td>${row.savings}</td>
+                  <td>${row.provenance}</td>
                 </tr>
               `,
                 )
@@ -210,20 +197,36 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Bar */}
+      {/* DEMO_MODE Explicit Banner */}
+      {IS_DEMO_MODE && (
+        <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-950 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-amber-700 shrink-0" />
+            <span>
+              <strong>DEMO / SIMULATION MODE ACTIVE:</strong> Displaying benchmark simulation energy
+              ledger data. All interval records are tagged with provenance:{" "}
+              <code className="bg-amber-200/80 px-1.5 py-0.5 rounded font-mono font-bold text-[10px]">
+                SIMULATION
+              </code>
+            </span>
+          </div>
+          <span className="font-mono text-[10px] font-bold bg-amber-200 text-amber-950 px-2 py-0.5 rounded-full border border-amber-300">
+            DEMO_MODE
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1F2937]">
             Reports & Compliance
           </h1>
           <p className="text-xs sm:text-sm text-[#6B7280]">
-            Energy, cost and carbon performance across Tata Steel Jamshedpur
+            Energy, cost and carbon performance across industrial complex assets
           </p>
         </div>
 
-        {/* Right Top Controls: Segmented Period Selector & PDF Export Button */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* HIGH CONTRAST SEGMENTED PERIOD SELECTOR */}
           <div className="flex items-center gap-1 rounded-full bg-[#FAF8F5] border border-[#E6E1D7] p-1 shadow-2xs">
             {(["Daily", "Weekly", "Monthly"] as ReportPeriod[]).map((p) => {
               const isActive = period === p;
@@ -244,7 +247,6 @@ export function ReportsPage() {
             })}
           </div>
 
-          {/* EXPORT CSV LEDGER BUTTON */}
           <button
             onClick={handleExportCSV}
             className="inline-flex items-center gap-2 rounded-full bg-white border border-[#E6E1D7] px-4 py-2.5 text-xs sm:text-sm font-bold text-[#1B4D3E] hover:bg-[#FAF8F5] transition-all shadow-xs active:scale-95 cursor-pointer"
@@ -253,7 +255,6 @@ export function ReportsPage() {
             <span>Export CSV Ledger</span>
           </button>
 
-          {/* EXPORT PDF BUTTON */}
           <button
             onClick={handleExportPDF}
             className="inline-flex items-center gap-2 rounded-full bg-[#1B4D3E] px-5 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-[#133E32] transition-all shadow-md active:scale-95 cursor-pointer border-none"
@@ -264,7 +265,6 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Measurement & Verification Demarcation Notice */}
       <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-950 flex items-start gap-3 shadow-2xs">
         <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
         <div className="space-y-0.5">
@@ -280,9 +280,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 4 Key Metrics Cards (Updated dynamically by period selection) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Energy Consumed */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -303,7 +301,6 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Card 2: Electricity Cost */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -321,7 +318,6 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Card 3: Carbon Emissions */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -344,7 +340,6 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Card 4: Modeled Savings (Simulation) */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -366,9 +361,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Main Charts Row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Source-wise Consumption Stacked Bar Chart */}
         <div className="xl:col-span-2 rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -406,7 +399,6 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Cost & Savings Trend Chart */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs space-y-4">
           <div>
             <h3 className="font-display text-lg font-bold text-[#1F2937]">Cost & savings trend</h3>
@@ -449,7 +441,6 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Dynamic Report Ledger Table */}
       <div className="rounded-3xl bg-white border border-[#E6E1D7] p-6 shadow-xs space-y-4 overflow-x-auto">
         <div className="flex items-center justify-between">
           <div>
@@ -500,7 +491,8 @@ export function ReportsPage() {
               <th className="pb-3">Landed Cost</th>
               <th className="pb-3">CO₂ Emissions</th>
               <th className="pb-3">Renewable %</th>
-              <th className="pb-3">Modeled Savings (Simulated)</th>
+              <th className="pb-3">Modeled Savings</th>
+              <th className="pb-3">Provenance</th>
               <th className="pb-3 text-right">Block Hash (SHA-256)</th>
             </tr>
           </thead>
@@ -513,6 +505,11 @@ export function ReportsPage() {
                 <td className="py-3.5 font-mono text-[#4B5563]">{row.co2} t</td>
                 <td className="py-3.5 font-mono font-bold text-emerald-700">{row.renewable}</td>
                 <td className="py-3.5 font-mono font-bold text-[#1B4D3E]">{row.savings}</td>
+                <td className="py-3.5">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                    {row.provenance}
+                  </span>
+                </td>
                 <td className="py-3.5 font-mono text-[11px] text-right text-[#6B7280]">
                   <span className="bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6E1D7]">
                     0x{row.hashShort}...

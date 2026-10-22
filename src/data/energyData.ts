@@ -13,7 +13,7 @@ export const DATA_PROVENANCE_DECLARATION = {
   isCertifiedSavings: false,
   sourceDescription: "Digital Twin Simulation Sandbox · Pre-Commissioning Model",
   disclaimer:
-    "DATA PROVENANCE NOTICE: All power readings (MW), tariffs, emissions, and savings figures in this dataset are generated from synthetic steel plant simulation benchmarks. They are NOT live physical plant telemetry or verified financial savings.",
+    "DATA PROVENANCE NOTICE: All power readings (MW), tariffs, emissions, and savings figures in this dataset are generated from synthetic industrial plant simulation benchmarks. They are NOT live physical plant telemetry or verified financial savings.",
 } as const;
 
 export type EnergySourceItem = {
@@ -41,25 +41,25 @@ export type PlantLocation = {
 
 export const plantLocations: PlantLocation[] = [
   {
-    id: "ts-jamshedpur",
-    name: "Tata Steel — Jamshedpur (Simulated Model)",
-    location: "Jamshedpur, India (Digital Twin Sandbox)",
+    id: "plant-main-works",
+    name: "Industrial Complex — Primary Works (Simulated Model)",
+    location: "Jaipur Grid Zone, India (Digital Twin Sandbox)",
     demandMW: 520,
     systemStatus: "System Stable",
     dataProvenance: "SYNTHETIC_SIMULATION_BENCHMARK",
   },
   {
-    id: "ts-kalinganagar",
-    name: "Tata Steel — Kalinganagar (Simulated Model)",
-    location: "Kalinganagar, India (Digital Twin Sandbox)",
+    id: "plant-east-complex",
+    name: "Industrial Complex — East Division (Simulated Model)",
+    location: "Eastern Renewable Corridor, India (Digital Twin Sandbox)",
     demandMW: 640,
     systemStatus: "High Renewable",
     dataProvenance: "SYNTHETIC_SIMULATION_BENCHMARK",
   },
   {
-    id: "ts-meramandali",
-    name: "Tata Steel — Meramandali (Simulated Model)",
-    location: "Dhenkanal, India (Digital Twin Sandbox)",
+    id: "plant-south-unit",
+    name: "Industrial Complex — South Unit (Simulated Model)",
+    location: "Southern Grid Substation, India (Digital Twin Sandbox)",
     demandMW: 480,
     systemStatus: "System Stable",
     dataProvenance: "SYNTHETIC_SIMULATION_BENCHMARK",
