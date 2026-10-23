@@ -1,124 +1,62 @@
-// Captures the original Error out-of-band so server.ts can recover the stack
-// when h3 has already swallowed the throw into a generic 500 Response.
 import * as Sentry from "@sentry/cloudflare";
 
-function scrubPii(event: Sentry.Event): Sentry.Event {
-  if (event.user) {
-    delete event.user.ip_address;
-    delete event.user.email;
-    delete event.user.username;
+let lastCapturedError: Error | unknown | null = null;
+
+/**
+ * Capture error safely to Sentry or console with PII scrubbing.
+ */
+export function captureError(error: Error | unknown, context?: Record<string, unknown>): void {
+  lastCapturedError = error;
+  const scrubbedContext = context ? scrubPii(context) : {};
+
+  if (typeof Sentry !== "undefined" && typeof Sentry.captureException === "function") {
+    Sentry.captureException(error, { extra: scrubbedContext });
+  } else {
+    console.error("[IntelliGrid Error]", error, scrubbedContext);
   }
-  if (event.request) {
-    if (event.request.headers) {
-      delete event.request.headers["cookie"];
-      delete event.request.headers["authorization"];
-      delete event.request.headers["x-session-token"];
-    }
-    if (event.request.cookies) {
-      event.request.cookies = {};
-    }
-  }
-  return event;
 }
 
-const sentryDsn = process.env["SENTRY_DSN"] || process.env["VITE_SENTRY_DSN"];
-type SentryModule = {
-  init?: (options: { dsn: string; beforeSend: typeof scrubPii; tracesSampleRate: number }) => void;
-  captureException?: (error: unknown) => void;
-};
-const sentryModule = Sentry as unknown as SentryModule;
+/**
+ * Consume and reset the last captured error for SSR failure reporting.
+ */
+export function consumeLastCapturedError(): Error | unknown | null {
+  const err = lastCapturedError;
+  lastCapturedError = null;
+  return err;
+}
 
-if (sentryDsn) {
-  try {
-    if (typeof sentryModule.init === "function") {
-      sentryModule.init({
-        dsn: sentryDsn,
-        beforeSend: scrubPii,
-        tracesSampleRate: 0.1,
+/**
+ * Scrub PII from context data before logging/sending.
+ */
+function scrubPii(obj: Record<string, unknown>): Record<string, unknown> {
+  const scrubbed: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (/password|secret|token|cookie|auth|ip/i.test(key)) {
+      scrubbed[key] = "[REDACTED]";
+    } else if (val && typeof val === "object" && !Array.isArray(val)) {
+      scrubbed[key] = scrubPii(val as Record<string, unknown>);
+    } else {
+      scrubbed[key] = val;
+    }
+  }
+  return scrubbed;
+}
+
+/**
+ * Global unhandled rejection handler.
+ */
+export function setupErrorHandling(): void {
+  if (typeof window !== "undefined") {
+    window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+      captureError(event.reason, { type: "unhandledrejection" });
+    });
+
+    window.addEventListener("error", (event: ErrorEvent) => {
+      captureError(event.error || event.message, {
+        type: "uncaughtError",
+        filename: event.filename,
+        lineno: event.lineno,
       });
-    }
-  } catch {
-    // Sentry init fail-safe
+    });
   }
-}
-
-let lastCapturedError: { error: unknown; at: number } | undefined;
-const TTL_MS = 5_000;
-
-function record(error: unknown) {
-  lastCapturedError = { error, at: Date.now() };
-  if (sentryDsn && error) {
-    try {
-      if (typeof sentryModule.captureException === "function") {
-        sentryModule.captureException(error);
-      }
-    } catch {
-      // Sentry capture fail-safe
-    }
-  }
-}
-
-const CAUSE_DEPTH_LIMIT = 5;
-const DESCRIPTION_LENGTH_LIMIT = 8_000;
-
-export function describeError(error: unknown): string {
-  const parts: string[] = [];
-  let current: unknown = error;
-  for (let depth = 0; depth < CAUSE_DEPTH_LIMIT && current != null; depth++) {
-    if (!(current instanceof Error)) {
-      parts.push(typeof current === "string" ? current : safeStringify(current));
-      break;
-    }
-    const label = depth === 0 ? "" : "caused by: ";
-    const status = describeStatus(current);
-    parts.push(`${label}${current.stack ?? `${current.name}: ${current.message}`}${status}`);
-    current = current.cause;
-  }
-  return parts.join("\n").slice(0, DESCRIPTION_LENGTH_LIMIT);
-}
-
-function describeStatus(error: Error): string {
-  const { status, statusCode } = error as { status?: unknown; statusCode?: unknown };
-  const value = status ?? statusCode;
-  return typeof value === "number" ? ` (status ${value})` : "";
-}
-
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function isErrorLike(value: unknown): value is Error {
-  return value instanceof Error;
-}
-
-const originalConsoleError = console.error.bind(console);
-console.error = (...args: unknown[]) => {
-  const expanded = args.map((arg) => {
-    if (!isErrorLike(arg)) return arg;
-    record(arg);
-    return describeError(arg);
-  });
-  originalConsoleError(...expanded);
-};
-
-if (typeof globalThis.addEventListener === "function") {
-  globalThis.addEventListener("error", (event) => record((event as ErrorEvent).error ?? event));
-  globalThis.addEventListener("unhandledrejection", (event) =>
-    record((event as PromiseRejectionEvent).reason),
-  );
-}
-
-export function consumeLastCapturedError(): unknown {
-  if (!lastCapturedError) return undefined;
-  if (Date.now() - lastCapturedError.at > TTL_MS) {
-    lastCapturedError = undefined;
-    return undefined;
-  }
-  const { error } = lastCapturedError;
-  lastCapturedError = undefined;
-  return error;
 }

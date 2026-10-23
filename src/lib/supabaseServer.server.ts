@@ -1,44 +1,31 @@
-import { createServerClient } from "@supabase/ssr";
-import { getCookies, setCookie, deleteCookie } from "@tanstack/react-start/server";
-export { getSupabaseServiceClient } from "./supabaseService";
-
-type SetCookieOptions = Parameters<typeof setCookie>[2];
-type DeleteCookieOptions = Parameters<typeof deleteCookie>[1];
+import { createServerClient, parseCookieHeader, serializeCookieHeader } from "@supabase/ssr";
+import { getCookie, setCookie } from "@tanstack/react-start/server";
 
 export function getSupabaseServerClient() {
   const supabaseUrl =
     process.env["SUPABASE_URL"] ||
     process.env["VITE_SUPABASE_URL"] ||
-    "https://placeholder-supabase-url.supabase.co";
+    "https://placeholder.supabase.co";
   const supabaseAnonKey =
     process.env["SUPABASE_ANON_KEY"] ||
     process.env["VITE_SUPABASE_ANON_KEY"] ||
-    "placeholder-supabase-anon-key";
+    "placeholder-anon-key";
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
-        try {
-          const cookies = getCookies();
-          return Object.entries(cookies).map(([name, value]) => ({
-            name,
-            value: value ?? "",
-          }));
-        } catch {
-          return [];
-        }
+        const cookieHeader = getCookie("sb-access-token") || "";
+        return parseCookieHeader(cookieHeader);
       },
       setAll(cookiesToSet) {
-        try {
-          for (const { name, value, options } of cookiesToSet) {
-            if (!value) {
-              deleteCookie(name, options as DeleteCookieOptions);
-            } else {
-              setCookie(name, value, options as SetCookieOptions);
-            }
-          }
-        } catch {
-          // Response headers already sent
+        for (const { name, value, options } of cookiesToSet) {
+          const cookieStr = serializeCookieHeader(name, value, options);
+          setCookie(name, cookieStr, {
+            path: options?.path || "/",
+            httpOnly: options?.httpOnly ?? true,
+            secure: options?.secure ?? process.env["NODE_ENV"] === "production",
+            sameSite: (options?.sameSite as "lax" | "strict" | "none") || "lax",
+          });
         }
       },
     },
