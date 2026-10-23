@@ -1,17 +1,63 @@
 // Captures the original Error out-of-band so server.ts can recover the stack
 // when h3 has already swallowed the throw into a generic 500 Response.
+import * as Sentry from "@sentry/cloudflare";
+
+function scrubPii(event: Sentry.Event): Sentry.Event {
+  if (event.user) {
+    delete event.user.ip_address;
+    delete event.user.email;
+    delete event.user.username;
+  }
+  if (event.request) {
+    if (event.request.headers) {
+      delete event.request.headers["cookie"];
+      delete event.request.headers["authorization"];
+      delete event.request.headers["x-session-token"];
+    }
+    if (event.request.cookies) {
+      event.request.cookies = {};
+    }
+  }
+  return event;
+}
+
+const sentryDsn = process.env["SENTRY_DSN"] || process.env["VITE_SENTRY_DSN"];
+type SentryModule = {
+  init?: (options: { dsn: string; beforeSend: typeof scrubPii; tracesSampleRate: number }) => void;
+  captureException?: (error: unknown) => void;
+};
+const sentryModule = Sentry as unknown as SentryModule;
+
+if (sentryDsn) {
+  try {
+    if (typeof sentryModule.init === "function") {
+      sentryModule.init({
+        dsn: sentryDsn,
+        beforeSend: scrubPii,
+        tracesSampleRate: 0.1,
+      });
+    }
+  } catch {
+    // Sentry init fail-safe
+  }
+}
 
 let lastCapturedError: { error: unknown; at: number } | undefined;
 const TTL_MS = 5_000;
 
 function record(error: unknown) {
   lastCapturedError = { error, at: Date.now() };
+  if (sentryDsn && error) {
+    try {
+      if (typeof sentryModule.captureException === "function") {
+        sentryModule.captureException(error);
+      }
+    } catch {
+      // Sentry capture fail-safe
+    }
+  }
 }
 
-// h3's HTTPError serializes to {"status":500,"unhandled":true,"message":"HTTPError"} —
-// no stack, no cause — so a plain console.error(error) reaches the log pipeline with
-// the failure detail stripped. Expand Error-like args into a string that keeps the
-// message, stack, and the full cause chain.
 const CAUSE_DEPTH_LIMIT = 5;
 const DESCRIPTION_LENGTH_LIMIT = 8_000;
 
@@ -49,9 +95,6 @@ function isErrorLike(value: unknown): value is Error {
   return value instanceof Error;
 }
 
-// Wrap console.error so errors logged by any layer — including h3's internal
-// unhandled-error logging, which this file cannot hook directly — are both
-// recorded for consumeLastCapturedError and expanded before serialization.
 const originalConsoleError = console.error.bind(console);
 console.error = (...args: unknown[]) => {
   const expanded = args.map((arg) => {

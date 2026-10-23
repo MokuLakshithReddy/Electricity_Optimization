@@ -1,5 +1,5 @@
 /**
- * Emission factors for Tata Steel industrial plant energy sources.
+ * Emission factors for industrial plant energy sources.
  * Expressed in metric tonnes CO2 per MWh (or kg CO2 / kWh).
  */
 export const emissionFactors = {

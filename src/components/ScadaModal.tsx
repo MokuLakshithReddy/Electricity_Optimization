@@ -1,12 +1,10 @@
 import React from "react";
-import { X, Activity, ShieldCheck, Gauge, AlertTriangle, Cpu, Zap, Lock, Info } from "lucide-react";
+import { X, Activity, ShieldCheck, Gauge, Zap, Lock, Cpu } from "lucide-react";
 import {
   SUBMETERS,
   BESS_STATUS,
   GENERATOR_FLEET,
-  ACTIVE_ALARMS,
   AUDIT_LOG,
-  SCADA_SIMULATION_METADATA,
   SITE_SAFETY_VALIDATION,
 } from "@/lib/scadaSystem";
 
@@ -38,7 +36,7 @@ export function ScadaModal({ isOpen, onClose }: ScadaModalProps) {
                 </span>
               </div>
               <p className="text-xs text-[#6B7280]">
-                Synthetic Modbus TCP / OPC-UA Register Model · Tata Steel Jamshedpur Complex
+                Synthetic Modbus TCP / OPC-UA Register Model · Industrial Plant Control Complex
               </p>
             </div>
           </div>

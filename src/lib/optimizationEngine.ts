@@ -256,8 +256,8 @@ export function validateHorizonInputs(
   const errors: string[] = [];
   const H = input.horizonHours;
 
-  if (!Number.isInteger(H) || H < 1 || H > 168) {
-    errors.push(`Invalid horizonHours: ${H}. Must be an integer between 1 and 168.`);
+  if (!Number.isInteger(H) || H < 1 || H > 48) {
+    errors.push(`Invalid horizonHours: ${H}. Must be an integer between 1 and 48.`);
   }
 
   // Array length checks
@@ -1176,7 +1176,7 @@ function calculateFeasibleOperatingBaseline(
 export function solveHorizonDispatch(input: HorizonDispatchInput): HorizonOptimizationResult {
   const startTime = performance.now();
   const c: AssetConstraints = { ...DEFAULT_CONSTRAINTS, ...input.constraints };
-  const H = Math.max(1, Math.min(168, input.horizonHours));
+  const H = Math.max(1, Math.min(48, input.horizonHours));
   const isGridAvailable = input.isGridAvailable ?? true;
   const targetTerminalSOC = input.targetTerminalSOC;
 

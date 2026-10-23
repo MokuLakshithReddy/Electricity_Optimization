@@ -1,4 +1,4 @@
-import { Sun, Wind, Zap, Network, ShieldAlert, Factory } from "lucide-react";
+import { Sun, Wind, Zap, Network, ShieldAlert } from "lucide-react";
 import { useEnergyState } from "@/context/EnergyContext";
 
 interface SourceMixSectionProps {
@@ -68,7 +68,7 @@ export function SourceMixSection({ onSelectSource }: SourceMixSectionProps) {
         <div>
           <h3 className="font-display text-xl font-bold text-[#1F2937]">Current Energy Mix</h3>
           <p className="text-xs text-[#6B7280]">
-            Live generation breakdown across Tata Steel assets
+            Live generation breakdown across plant energy assets
           </p>
         </div>
       </div>

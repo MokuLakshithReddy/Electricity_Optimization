@@ -1,20 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Send,
-  Sparkles,
-  Mic,
-  Zap,
-  ShieldCheck,
-  Leaf,
-  Activity,
-  ArrowRight,
-  HelpCircle,
-  TrendingUp,
-  Cpu,
-  AlertTriangle,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { Send, Sparkles, Mic } from "lucide-react";
 import { useEnergyState } from "@/context/EnergyContext";
 import { ExplainableCard } from "@/components/ExplainableCard";
 import { smartRecommendations } from "@/lib/intel";
@@ -32,7 +19,7 @@ export const Route = createFileRoute("/app/copilot")({
       { property: "og:title", content: "AI Energy Copilot — IntelliGrid AI" },
       {
         property: "og:description",
-        content: "Enterprise AI control assistant for Tata Steel Jamshedpur energy management.",
+        content: "Enterprise AI control assistant for industrial plant energy management.",
       },
     ],
   }),
@@ -91,7 +78,6 @@ function CopilotPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinkingStep]);
 
-  // Generate intelligent, mathematically verified response using Copilot Reasoning Engine
   const getAIResponse = (query: string): ChatMessage => {
     const analysis = analyzeCopilotQuery(query, {
       demandMW: energyState.totalDemandMW,
@@ -155,7 +141,6 @@ function CopilotPage() {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
 
-    // Simulate multi-step AI thinking
     setThinkingStep("Analyzing live plant telemetry...");
     setTimeout(() => {
       setThinkingStep("Evaluating available energy sources & tariffs...");
@@ -180,7 +165,6 @@ function CopilotPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1F2937]">
@@ -196,11 +180,8 @@ function CopilotPage() {
         </div>
       </div>
 
-      {/* Main 2-Column Grid: 68% Left Copilot Panel | 32% Right Explainable Recommendations */}
       <div className="grid grid-cols-1 xl:grid-cols-[68%_32%] gap-6 items-start">
-        {/* LEFT COLUMN: MAIN COPILOT PANEL */}
         <div className="rounded-3xl bg-white border border-[#E6E1D7] shadow-xs flex flex-col h-[740px] overflow-hidden">
-          {/* Panel Header & Live Telemetry Context Bar */}
           <div className="border-b border-[#F3F0EA] p-4 bg-[#FAF8F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#1B4D3E] text-white">
@@ -216,7 +197,6 @@ function CopilotPage() {
               </div>
             </div>
 
-            {/* Live Plant Context Badges */}
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-ping" />
@@ -237,9 +217,7 @@ function CopilotPage() {
             </div>
           </div>
 
-          {/* Chat Messages Body */}
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            {/* Welcome State when no messages */}
             {messages.length === 0 && (
               <div className="my-6 rounded-3xl bg-[#FAF8F5] border border-[#E6E1D7] p-6 space-y-3">
                 <h3 className="font-display text-xl font-bold text-[#1F2937]">
@@ -255,7 +233,6 @@ function CopilotPage() {
               </div>
             )}
 
-            {/* Chat Conversation Messages */}
             {messages.map((msg) => (
               <motion.div
                 key={msg.id}
@@ -273,7 +250,6 @@ function CopilotPage() {
                       {msg.text}
                     </div>
 
-                    {/* Decision Breakdown Grid */}
                     {msg.decision && (
                       <div className="rounded-2xl bg-white border border-[#E6E1D7] p-3.5 space-y-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
@@ -310,7 +286,6 @@ function CopilotPage() {
                       </div>
                     )}
 
-                    {/* Expected Impact Pills */}
                     {msg.impact && (
                       <div className="flex flex-wrap items-center gap-2 text-xs pt-1 border-t border-[#E6E1D7]">
                         <span className="font-bold text-[#1B4D3E] bg-[#E8F5E9] px-2.5 py-1 rounded-xl">
@@ -328,7 +303,6 @@ function CopilotPage() {
                       </div>
                     )}
 
-                    {/* Action Link Button */}
                     {msg.actionLink && (
                       <button
                         onClick={() => {
@@ -346,7 +320,6 @@ function CopilotPage() {
               </motion.div>
             ))}
 
-            {/* AI Multi-Step Thinking Indicator */}
             {thinkingStep && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -361,9 +334,7 @@ function CopilotPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Sticky Bottom Input Section */}
           <div className="p-4 border-t border-[#F3F0EA] bg-[#FAF8F5] space-y-3">
-            {/* Quick Suggestions Chips */}
             <div className="flex flex-wrap gap-2">
               {quickQuestions.map((q) => (
                 <button
@@ -376,7 +347,6 @@ function CopilotPage() {
               ))}
             </div>
 
-            {/* Textarea Input Form */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -426,7 +396,6 @@ function CopilotPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: EXPLAINABLE RECOMMENDATIONS (32% width) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-sm font-bold uppercase tracking-wider text-[#6B7280]">

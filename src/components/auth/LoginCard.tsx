@@ -12,31 +12,28 @@ interface LoginCardProps {
   className?: string;
 }
 
-// Certified enterprise demo accounts configured on the server
-const DEMO_ACCOUNTS = [
+// Certified enterprise personnel profiles
+const USER_PROFILES = [
   {
     label: "R. Kulkarni (Energy Manager)",
     username: "r.kulkarni",
-    pass: "SteelGrid#2026!Secure",
     role: "Energy Manager",
   },
   {
     label: "P. Sharma (Operations Engineer)",
     username: "p.sharma",
-    pass: "ControlOps#2026!Grid",
     role: "Operations Engineer",
   },
   {
     label: "Security Admin (Full Audit/Root)",
     username: "admin",
-    pass: "PlantAdmin#2026!Root",
     role: "Administrator",
   },
 ];
 
 export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
-  const [username, setUsername] = useState(DEMO_ACCOUNTS[0]!.username);
-  const [password, setPassword] = useState(DEMO_ACCOUNTS[0]!.pass);
+  const [username, setUsername] = useState(USER_PROFILES[0]!.username);
+  const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -44,6 +41,10 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    if (!password) {
+      setErrorMsg("Please enter your account passphrase.");
+      return;
+    }
     setLoading(true);
 
     try {
@@ -60,9 +61,9 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
     }
   };
 
-  const handleSelectAccount = (acc: (typeof DEMO_ACCOUNTS)[0]) => {
+  const handleSelectAccount = (acc: (typeof USER_PROFILES)[0]) => {
     setUsername(acc.username);
-    setPassword(acc.pass);
+    setPassword("");
     setErrorMsg(null);
   };
 
@@ -95,7 +96,7 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
           Select Authorized Personnel Profile
         </label>
         <div className="space-y-1.5">
-          {DEMO_ACCOUNTS.map((acc) => {
+          {USER_PROFILES.map((acc) => {
             const isSelected = username === acc.username;
             return (
               <button
@@ -173,7 +174,7 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
       {/* Security Context Footer */}
       <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-[11px] font-medium text-slate-500">
         <ShieldCheck className="w-3.5 h-3.5 text-[#159A72]" />
-        <span>Server HMAC-SHA256 tokens · Salted PBKDF2 hashes</span>
+        <span>Supabase Auth · httpOnly Cookie Sessions</span>
       </div>
     </motion.div>
   );

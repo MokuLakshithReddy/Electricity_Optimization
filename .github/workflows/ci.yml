@@ -8,12 +8,16 @@ on:
 
 jobs:
   verify:
-    name: Test & Build Verification
+    name: Test & Security Verification
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js 22.x
         uses: actions/setup-node@v4
@@ -24,14 +28,40 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Audit Production Dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Run Gitleaks Secret Detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: TypeScript Static Type Analysis
         run: npx tsc --noEmit
 
       - name: Code Quality & Lint Verification
         run: npm run lint
 
-      - name: Run Optimization Engine & 24h MILP Benchmark Verification
-        run: npm run test:optimizer
+      - name: Run Vitest Suite (35 Optimizer Proofs & Auth/Ledger Tests)
+        run: npx vitest run
 
       - name: Run Production Application Build
         run: npm run build
+
+  codeql:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
