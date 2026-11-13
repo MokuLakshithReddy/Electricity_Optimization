@@ -1,5 +1,8 @@
 # IntelliGrid AI ⚡
 
+[![Stars](https://img.shields.io/github/stars/MokuLakshithReddy/Electricity_Optimization?style=flat-square)](https://github.com/MokuLakshithReddy/Electricity_Optimization/stargazers) [![Forks](https://img.shields.io/github/forks/MokuLakshithReddy/Electricity_Optimization?style=flat-square)](https://github.com/MokuLakshithReddy/Electricity_Optimization/forks) [![Open Issues](https://img.shields.io/github/issues/MokuLakshithReddy/Electricity_Optimization?style=flat-square)](https://github.com/MokuLakshithReddy/Electricity_Optimization/issues) [![Last Commit](https://img.shields.io/github/last-commit/MokuLakshithReddy/Electricity_Optimization?style=flat-square)](https://github.com/MokuLakshithReddy/Electricity_Optimization/commits/main)
+
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Framework: TanStack Start](https://img.shields.io/badge/Framework-TanStack%20Start-FF4154.svg)](https://tanstack.com/start)
 [![React: 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev/)
