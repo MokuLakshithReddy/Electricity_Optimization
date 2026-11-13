@@ -31,6 +31,33 @@ It continuously monitors telemetry, forecasts plant demand and renewable generat
 
 ---
 
+## At a glance
+
+![GitHub stars](https://img.shields.io/github/stars/MokuLakshithReddy/Electricity_Optimization?style=flat-square&label=stars)
+![Last commit](https://img.shields.io/github/last-commit/MokuLakshithReddy/Electricity_Optimization?style=flat-square)
+![Open issues](https://img.shields.io/github/issues/MokuLakshithReddy/Electricity_Optimization?style=flat-square&label=open%20issues)
+
+**Why it matters:** Industrial energy scheduling is a constrained optimization problem across cost, emissions, equipment limits, battery state, and reliability. IntelliGrid AI makes those trade-offs explicit over a multi-interval horizon rather than treating each energy source independently.
+
+## Dispatch architecture
+
+```mermaid
+flowchart TD
+    T["Telemetry and demand / renewable inputs"] --> F["Forecast and horizon preparation"]
+    F --> O["Multi-interval economic dispatch"]
+    O --> C["Battery, ramping and generator constraints"]
+    C --> S["Canonical two-phase simplex solver"]
+    S --> V{"Plan feasible and executable?"}
+    V -->|"No"| X["Reject automatic dispatch<br/>return deficit and infeasibility details"]
+    V -->|"Yes"| P["Proposed dispatch plan"]
+    P --> A["Role and policy checks"]
+    A --> L["Hash-chained energy and carbon audit ledger"]
+    P --> D["Digital-twin / simulated dispatch view"]
+```
+
+**Operational boundary:** The README describes a hardware-simulation boundary and fail-closed handling for infeasible plans. The presence of an optimizer or dashboard should not be interpreted as proof of a live SCADA deployment, verified energy savings, or field-tested control performance.
+
+---
 ## 🚀 Core Architectural Capabilities
 
 1. **Multi-Interval Horizon Dispatch (MPC)**: Lookahead scheduling across 24 hourly intervals incorporating diurnal solar/wind generation, time-of-use (ToU) peak/shoulder/off-peak tariffs, and plant operational shifts.
