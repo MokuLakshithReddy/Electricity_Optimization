@@ -10,9 +10,9 @@
 [![Optimization: Multi--Interval%20MPC](https://img.shields.io/badge/Solver-Canonical%20Two--Phase%20Simplex-00C853.svg)](#multi-interval-horizon-economic-dispatch-solver)
 [![Audit: SHA--256%20Ledger](https://img.shields.io/badge/Audit%20Ledger-Cryptographically%20Chained-F57C00.svg)](#cryptographically-chained-energy-ledger)
 
-**IntelliGrid AI** is an industrial-grade, AI-powered Energy Orchestration & Multi-Interval Economic Dispatch platform designed for energy-intensive industrial facilities (e.g., steel manufacturing, continuous smelting, chemical complexes).
+**IntelliGrid AI** is an energy-management and economic-dispatch software prototype for exploring generation, storage, tariff, and demand decisions over a 24-hour planning horizon.
 
-It continuously monitors telemetry, forecasts plant demand and renewable generation across 24-hour horizons, solves multi-period constrained economic dispatch problems, and orchestrates energy resources (Solar, Wind, Battery Energy Storage, Grid Power, Captive Cogeneration, and Diesel Generation) to minimize electricity costs and carbon emissions while guaranteeing grid stability and equipment protection.
+It combines a multi-period dispatch optimizer with dashboard views for solar, wind, battery storage, grid, captive generation, and diesel resources. The UI has mock-simulation inputs and a weather-ingestion path; it should not be presented as a live plant controller without a real SCADA/meter integration and field validation.
 
 ---
 
@@ -36,9 +36,9 @@ It continuously monitors telemetry, forecasts plant demand and renewable generat
 
 ## At a glance
 
-![GitHub stars](https://img.shields.io/github/stars/MokuLakshithReddy/Electricity_Optimization?style=flat-square&label=stars)
-![Last commit](https://img.shields.io/github/last-commit/MokuLakshithReddy/Electricity_Optimization?style=flat-square)
-![Open issues](https://img.shields.io/github/issues/MokuLakshithReddy/Electricity_Optimization?style=flat-square&label=open%20issues)
+[![GitHub stars](https://img.shields.io/github/stars/MokuLakshithReddy/Electricity_Optimization?style=flat-square&label=stars)](https://github.com/MokuLakshithReddy/Electricity_Optimization/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/MokuLakshithReddy/Electricity_Optimization?style=flat-square)](https://github.com/MokuLakshithReddy/Electricity_Optimization/commits/main)
+[![Open issues](https://img.shields.io/github/issues/MokuLakshithReddy/Electricity_Optimization?style=flat-square&label=open%20issues)](https://github.com/MokuLakshithReddy/Electricity_Optimization/issues)
 
 **Why it matters:** Industrial energy scheduling is a constrained optimization problem across cost, emissions, equipment limits, battery state, and reliability. IntelliGrid AI makes those trade-offs explicit over a multi-interval horizon rather than treating each energy source independently.
 
@@ -57,6 +57,20 @@ flowchart TD
     A --> L["Hash-chained energy and carbon audit ledger"]
     P --> D["Digital-twin / simulated dispatch view"]
 ```
+
+### What is simulated and what is live
+
+The repository has a deterministic mock-snapshot path for local UI development. It also includes a separate Open-Meteo weather ingestion path for solar/wind availability estimates. Weather data is not the same as live plant telemetry: the repository should not be read as proof of a production SCADA integration or metered industrial savings. Model outputs depend on configured assumptions, tariffs, and equipment constraints.
+
+### Verification evidence
+
+The optimizer test suite includes 24-interval power-balance checks, battery state-of-charge and efficiency constraints, generator startup/shutdown and ramp constraints, outage and infeasibility cases, plus comparison with independent reference solver implementations. Run the optimizer checks with:
+
+```bash
+npm run test:optimizer
+```
+
+These tests validate modeled constraints and deterministic fixtures; they are not a field trial or a measured reduction in a real facility's electricity bill.
 
 **Operational boundary:** The README describes a hardware-simulation boundary and fail-closed handling for infeasible plans. The presence of an optimizer or dashboard should not be interpreted as proof of a live SCADA deployment, verified energy savings, or field-tested control performance.
 
