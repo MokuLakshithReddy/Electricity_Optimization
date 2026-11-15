@@ -18,25 +18,31 @@ const USER_PROFILES = [
     label: "R. Kulkarni (Energy Manager)",
     username: "r.kulkarni",
     role: "Energy Manager",
+    passphrase: "kulkarni_pwd",
   },
   {
     label: "P. Sharma (Operations Engineer)",
     username: "p.sharma",
     role: "Operations Engineer",
+    passphrase: "sharma_pwd",
   },
   {
     label: "Security Admin (Full Audit/Root)",
     username: "admin",
     role: "Administrator",
+    passphrase: "admin_pwd",
   },
 ];
 
 export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
   const [username, setUsername] = useState(USER_PROFILES[0]!.username);
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(USER_PROFILES[0]!.passphrase);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const activeProfile =
+    USER_PROFILES.find((p) => p.username === username) || USER_PROFILES[0]!;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +69,7 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
 
   const handleSelectAccount = (acc: (typeof USER_PROFILES)[0]) => {
     setUsername(acc.username);
-    setPassword("");
+    setPassword(acc.passphrase);
     setErrorMsg(null);
   };
 
@@ -147,14 +153,31 @@ export function LoginCard({ onSuccess, className = "" }: LoginCardProps) {
         />
 
         {/* Password */}
-        <PasswordField
-          label="Passphrase"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••••••"
-          autoComplete="current-password"
-          required
-        />
+        <div>
+          <PasswordField
+            label="Passphrase"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••••••"
+            autoComplete="current-password"
+            required
+          />
+          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+            <span>
+              Preset passphrase:{" "}
+              <code className="font-mono font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                {activeProfile.passphrase}
+              </code>
+            </span>
+            <button
+              type="button"
+              onClick={() => setPassword(activeProfile.passphrase)}
+              className="text-emerald-600 hover:text-emerald-700 font-medium underline cursor-pointer"
+            >
+              Auto-fill
+            </button>
+          </div>
+        </div>
 
         {/* Remember me & Forgot password */}
         <div className="pt-1">
