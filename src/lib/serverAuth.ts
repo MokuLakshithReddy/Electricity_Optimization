@@ -592,7 +592,7 @@ export const serverRunOptimization = createServerFn({ method: "POST" })
 
 const updateAssetConstraintsSchema = z.object({
   token: z.string().optional(),
-  newConstraints: z.record(z.union([z.string(), z.number(), z.boolean()])),
+  newConstraints: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 
 /**
